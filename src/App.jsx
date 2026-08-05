@@ -212,31 +212,28 @@ function useAppData() {
   const firstLoad = useRef(true);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await window.storage.get(STORAGE_KEY, false);
-        if (res && res.value) {
-          setData(JSON.parse(res.value));
-        } else {
-          const d = demoData();
-          setData(d);
-          await window.storage.set(STORAGE_KEY, JSON.stringify(d), false);
-        }
-        setStatus("ready");
-      } catch (e) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        setData(JSON.parse(raw));
+      } else {
         const d = demoData();
         setData(d);
-        try { await window.storage.set(STORAGE_KEY, JSON.stringify(d), false); } catch (e2) {}
-        setStatus("ready");
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
       }
-    })();
+    } catch (e) {
+      const d = demoData();
+      setData(d);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch (e2) {}
+    }
+    setStatus("ready");
   }, []);
 
   useEffect(() => {
     if (firstLoad.current) { firstLoad.current = false; return; }
     if (!data) return;
-    const t = setTimeout(async () => {
-      try { await window.storage.set(STORAGE_KEY, JSON.stringify(data), false); } catch (e) {}
+    const t = setTimeout(() => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
     }, 450);
     return () => clearTimeout(t);
   }, [data]);
