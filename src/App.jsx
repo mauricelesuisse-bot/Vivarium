@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Bug, Box, History as HistoryIcon, ListChecks, Search as SearchIcon,
   Settings as SettingsIcon, Plus, X, Pencil, Trash2, ChevronDown, ChevronRight, ChevronLeft,
   Image as ImageIcon, Download, Upload, Printer, ArrowLeft, AlertCircle, Check,
-  Leaf, Skull, Egg, Sparkles, MapPin, CalendarClock, Menu
+  Leaf, Skull, Egg, Sparkles, MapPin, CalendarClock, Menu,
+  GitBranch, Hand, Feather, Syringe, Zap, Shell
 } from "lucide-react";
 
 /* ============================= CONSTANTS ============================= */
@@ -40,14 +41,27 @@ const GROUPS = [
   { id: "reduve", label: "Réduves" },
   { id: "orthoptere", label: "Orthoptères" },
   { id: "araignee", label: "Araignées" },
+  { id: "isopode", label: "Isopodes" },
   { id: "autre", label: "Autres" },
 ];
 
+const GROUP_ICONS = {
+  phasme: GitBranch,
+  mante: Hand,
+  blatte: Bug,
+  papillon: Feather,
+  reduve: Syringe,
+  orthoptere: Zap,
+  araignee: Bug,
+  isopode: Shell,
+  autre: Bug,
+};
+
 const STATUTS = [
   { id: "actif", label: "Actif" },
-  { id: "interrompu", label: "Interrompu" },
   { id: "ancien", label: "Ancien" },
   { id: "projete", label: "Envisagé" },
+  { id: "autre", label: "Autre" },
 ];
 
 const DIFFICULTES = [
@@ -186,6 +200,7 @@ function demoData() {
         due_date: "2026-07-30", recurring: true, freq: "2x / semaine", status: "pending", notes: "Retard — à faire rapidement." },
     ],
     plantPhotos: {},
+    groupPhotos: {},
   };
 }
 
@@ -197,28 +212,31 @@ function useAppData() {
   const firstLoad = useRef(true);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        setData(JSON.parse(raw));
-      } else {
+    (async () => {
+      try {
+        const res = await window.storage.get(STORAGE_KEY, false);
+        if (res && res.value) {
+          setData(JSON.parse(res.value));
+        } else {
+          const d = demoData();
+          setData(d);
+          await window.storage.set(STORAGE_KEY, JSON.stringify(d), false);
+        }
+        setStatus("ready");
+      } catch (e) {
         const d = demoData();
         setData(d);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+        try { await window.storage.set(STORAGE_KEY, JSON.stringify(d), false); } catch (e2) {}
+        setStatus("ready");
       }
-    } catch (e) {
-      const d = demoData();
-      setData(d);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch (e2) {}
-    }
-    setStatus("ready");
+    })();
   }, []);
 
   useEffect(() => {
     if (firstLoad.current) { firstLoad.current = false; return; }
     if (!data) return;
-    const t = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+    const t = setTimeout(async () => {
+      try { await window.storage.set(STORAGE_KEY, JSON.stringify(data), false); } catch (e) {}
     }, 450);
     return () => clearTimeout(t);
   }, [data]);
@@ -347,7 +365,35 @@ function PlantChip({ plant, active, photo, onSelect, onUpload }) {
   );
 }
 
-function SpeciesHub({ data, goGroup, openNewSpecies }) {
+function HubCard({ g, count, photo, onGo, onUpload }) {
+  const fileRef = useRef(null);
+  const Icon = GROUP_ICONS[g.id] || Bug;
+  return (
+    <div className="hub-card">
+      <button
+        type="button"
+        className="hub-card-icon"
+        onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+        title={photo ? "Changer l'illustration" : "Ajouter une illustration"}
+      >
+        {photo ? <img src={photo} alt="" /> : <Icon size={22} strokeWidth={1.3} />}
+      </button>
+      <button type="button" className="hub-card-main" onClick={() => onGo(g.id)}>
+        <div className="hub-card-label">{g.label}</div>
+        <div className="hub-card-count">{count} espèce{count > 1 ? "s" : ""}</div>
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { if (e.target.files[0]) onUpload(e.target.files[0]); e.target.value = ""; }} />
+    </div>
+  );
+}
+
+function SpeciesHub({ data, setData, goGroup, openNewSpecies }) {
+  const setGroupPhoto = async (groupId, file) => {
+    try {
+      const url = await resizeImage(file, 200, 0.78);
+      setData((d) => ({ ...d, groupPhotos: { ...(d.groupPhotos || {}), [groupId]: url } }));
+    } catch (e) {}
+  };
   return (
     <div className="page">
       <div className="page-head">
@@ -357,16 +403,19 @@ function SpeciesHub({ data, goGroup, openNewSpecies }) {
         </div>
         <button className="btn-primary" onClick={openNewSpecies}><Plus size={16} /> Nouvelle espèce</button>
       </div>
-      <p className="muted" style={{ marginBottom: 20 }}>Choisis un ordre pour voir uniquement les espèces qui lui appartiennent.</p>
+      <p className="muted" style={{ marginBottom: 20 }}>Choisis un ordre pour voir uniquement les espèces qui lui appartiennent. Clique sur l'icône d'une carte pour y mettre ta propre illustration.</p>
       <div className="hub-grid">
         {GROUPS.map((g) => {
           const count = data.species.filter((s) => s.groupe === g.id).length;
           return (
-            <button key={g.id} className="hub-card" onClick={() => goGroup(g.id)} type="button">
-              <div className="hub-card-icon"><Bug size={22} strokeWidth={1.3} /></div>
-              <div className="hub-card-label">{g.label}</div>
-              <div className="hub-card-count">{count} espèce{count > 1 ? "s" : ""}</div>
-            </button>
+            <HubCard
+              key={g.id}
+              g={g}
+              count={count}
+              photo={data.groupPhotos?.[g.id]}
+              onGo={goGroup}
+              onUpload={(file) => setGroupPhoto(g.id, file)}
+            />
           );
         })}
       </div>
@@ -379,17 +428,17 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
   const [plantFilter, setPlantFilter] = useState("all");
   const [showPlants, setShowPlants] = useState(false);
   const [showActif, setShowActif] = useState(false);
-  const [showInterrompu, setShowInterrompu] = useState(false);
+  const [showAncien, setShowAncien] = useState(false);
 
   const groupInfo = GROUPS.find((g) => g.id === group);
 
   const filtered = useMemo(() => {
-    const statusesChecked = showActif || showInterrompu;
+    const statusesChecked = showActif || showAncien;
     return data.species
       .filter((sp) => {
         if (sp.groupe !== group) return false;
         if (statusesChecked) {
-          const ok = (showActif && sp.statut === "actif") || (showInterrompu && sp.statut === "interrompu");
+          const ok = (showActif && sp.statut === "actif") || (showAncien && sp.statut === "ancien");
           if (!ok) return false;
         }
         if (plantFilter !== "all") {
@@ -403,7 +452,7 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
         return true;
       })
       .sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }));
-  }, [data.species, q, group, plantFilter, showActif, showInterrompu]);
+  }, [data.species, q, group, plantFilter, showActif, showAncien]);
 
   return (
     <div className="page">
@@ -454,8 +503,8 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
             Élevages actifs
           </label>
           <label className="toggle-only">
-            <input type="checkbox" checked={showInterrompu} onChange={(e) => setShowInterrompu(e.target.checked)} />
-            Élevages interrompus
+            <input type="checkbox" checked={showAncien} onChange={(e) => setShowAncien(e.target.checked)} />
+            Élevages anciens
           </label>
         </div>
       </div>
@@ -1452,7 +1501,7 @@ export default function App() {
 
           <main className="main-area">
             {view.page === "dashboard" && <Dashboard data={data} goSpecies={goSpecies} goSpeciesList={goSpeciesHub} />}
-            {view.page === "species-hub" && <SpeciesHub data={data} goGroup={goSpeciesGroup} openNewSpecies={() => setCreatingSpecies("")} />}
+            {view.page === "species-hub" && <SpeciesHub data={data} setData={setData} goGroup={goSpeciesGroup} openNewSpecies={() => setCreatingSpecies("")} />}
             {view.page === "species-group" && (
               <SpeciesList data={data} setData={setData} group={view.group} openSpecies={goSpecies} openNewSpecies={() => setCreatingSpecies(view.group)} onBackToHub={goSpeciesHub} />
             )}
@@ -1578,9 +1627,12 @@ input,select,textarea{ font-family:inherit; }
 /* Species grid & cards */
 .spec-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
 .hub-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
-.hub-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:20px 18px; text-align:left; display:flex; flex-direction:column; gap:8px; transition:border-color .15s, transform .15s; }
+.hub-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:20px 18px; display:flex; flex-direction:column; gap:8px; transition:border-color .15s, transform .15s; }
 .hub-card:hover{ border-color:var(--moss); transform:translateY(-2px); }
-.hub-card-icon{ width:38px; height:38px; border-radius:50%; background:var(--surface-alt); display:flex; align-items:center; justify-content:center; color:var(--amber); }
+.hub-card-icon{ width:44px; height:44px; border-radius:50%; background:var(--surface-alt); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--amber); overflow:hidden; padding:0; flex-shrink:0; }
+.hub-card-icon:hover{ border-color:var(--amber); }
+.hub-card-icon img{ width:100%; height:100%; object-fit:cover; }
+.hub-card-main{ background:none; border:none; padding:0; text-align:left; display:flex; flex-direction:column; gap:4px; }
 .hub-card-label{ font-family:'Fraunces',serif; font-size:17px; font-weight:600; color:var(--paper); }
 .hub-card-count{ font-size:12px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; }
 .spec-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); overflow:hidden; text-align:left; padding:0; display:flex; flex-direction:column; transition:border-color .15s, transform .15s; }
@@ -1597,9 +1649,9 @@ input,select,textarea{ font-family:inherit; }
 
 .pill{ font-size:10px; text-transform:uppercase; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace; padding:3px 8px; border-radius:20px; border:1px solid; }
 .pill-actif{ color:var(--moss); border-color:var(--moss-deep); background:rgba(140,163,126,0.1); }
-.pill-interrompu{ color:var(--amber); border-color:var(--amber-deep); background:rgba(209,154,68,0.1); }
 .pill-ancien{ color:var(--text-faint); border-color:var(--border); background:transparent; }
 .pill-projete{ color:#8FAEC9; border-color:#3D5A6E; background:rgba(143,174,201,0.1); }
+.pill-autre{ color:var(--amber); border-color:var(--amber-deep); background:rgba(209,154,68,0.1); }
 
 .empty-state{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:50px 20px; color:var(--text-faint); text-align:center; border:1px dashed var(--border); border-radius:var(--radius); }
 
