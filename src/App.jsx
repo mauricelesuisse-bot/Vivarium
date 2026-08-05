@@ -322,7 +322,6 @@ function ConfirmBar({ text, onConfirm, onCancel }) {
 /* ============================= SPECIES CARD & LIST ============================= */
 
 function SpeciesCard({ sp, onOpen }) {
-  const group = GROUPS.find((g) => g.id === sp.groupe);
   return (
     <button className="spec-card" onClick={onOpen} type="button">
       <div className="spec-card-photo">
@@ -331,7 +330,6 @@ function SpeciesCard({ sp, onOpen }) {
         ) : (
           <div className="spec-card-photo-empty"><Bug size={28} strokeWidth={1.3} /></div>
         )}
-        <span className="spec-card-tag">{group ? group.label : "—"}</span>
       </div>
       <div className="spec-card-body">
         <Eyebrow>{sp.taxo?.famille || "Famille non renseignée"}</Eyebrow>
@@ -1640,7 +1638,6 @@ input,select,textarea{ font-family:inherit; }
 .spec-card-photo{ height:120px; background:var(--bg-soft); position:relative; display:flex; align-items:center; justify-content:center; color:var(--text-faint); }
 .spec-card-photo img{ width:100%; height:100%; object-fit:cover; }
 .spec-card-photo-empty{ display:flex; align-items:center; justify-content:center; }
-.spec-card-tag{ position:absolute; top:8px; right:8px; background:rgba(20,26,18,0.8); color:var(--amber); font-family:'IBM Plex Mono',monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:0.6px; padding:3px 8px; border-radius:10px; border:1px solid var(--border-soft); }
 .spec-card-body{ padding:13px 14px 14px; display:flex; flex-direction:column; gap:2px; }
 .spec-sci-name{ font-family:'Fraunces',serif; font-style:italic; font-size:16.5px; color:var(--paper); }
 .spec-common-name{ font-size:12.5px; color:var(--text-dim); }
