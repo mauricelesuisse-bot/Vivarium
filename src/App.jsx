@@ -6576,10 +6576,10 @@ function AuthScreen() {
         <div className="auth-form">
           <div className="auth-sent">
             <Check size={18} />
-            <p>Un code à 6 chiffres a été envoyé à <strong>{email}</strong>.</p>
+            <p>Un code de connexion a été envoyé à <strong>{email}</strong>.</p>
           </div>
           <input
-            type="text" inputMode="numeric" placeholder="Code à 6 chiffres" value={code} maxLength={6}
+            type="text" inputMode="numeric" placeholder="Code reçu par email" value={code} maxLength={10}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => e.key === "Enter" && verifyCode()}
           />
