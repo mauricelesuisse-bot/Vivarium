@@ -73,6 +73,39 @@ const PREDATOR_GROUPS = ["mante", "reduve", "araignee"];
 // Groupes détritivores : se nourrissent de matière en décomposition, pas de feuillage frais
 const DETRITIVORE_GROUPS = ["isopode", "iule", "blatte", "coleoptere", "autre"];
 
+// Même système structuré, appliqué cette fois aux prédateurs (mantes, réduves, araignées dont veuve noire)
+const PREY_FOOD_CATEGORIES = [
+  { category: "Proies principales", items: [
+    { id: "drosophiles", label: "Drosophiles" },
+    { id: "mouches", label: "Mouches" },
+    { id: "grillons", label: "Grillons" },
+    { id: "criquets", label: "Criquets" },
+    { id: "blattes", label: "Blattes" },
+    { id: "vers-farine", label: "Vers de farine" },
+    { id: "vers-morios", label: "Vers morios" },
+    { id: "teignes-ruche", label: "Teignes de ruche" },
+    { id: "papillons-nuit", label: "Papillons / papillons de nuit" },
+    { id: "petits-insectes-volants", label: "Petits insectes volants" },
+    { id: "autres-insectes", label: "Autres insectes" },
+  ]},
+  { category: "Petites proies / micro-faune", items: [
+    { id: "poissons-argent", label: "Poissons d'argent" },
+    { id: "cloportes-blancs", label: "Cloportes blancs (« Weisse Asseln »)" },
+    { id: "collemboles", label: "Collemboles" },
+  ]},
+  { category: "Autres", items: [
+    { id: "autre", label: "Autre" },
+  ]},
+];
+const PREY_FOOD_LABELS = Object.fromEntries(PREY_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
+
+// Retourne la configuration du système alimentation structuré applicable au groupe (détritivore, prédateur, ou aucun = ancien système)
+function feedingConfigFor(groupe) {
+  if (DETRITIVORE_GROUPS.includes(groupe)) return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
+  if (PREDATOR_GROUPS.includes(groupe)) return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
+  return null;
+}
+
 // Phase 1 — système d'alimentation structuré pour les détritivores/omnivores (isopodes, iules, blattes détritivores, larves de Cetoniinae…)
 // Volontairement indépendant du reste (plantes nourricières / proies), et non lié rigidement à la taxonomie
 const DETRITIVORE_FOOD_CATEGORIES = [
@@ -117,10 +150,10 @@ const IMPORTANCE_LEVELS = [
 ];
 
 // Regroupe les aliments sélectionnés par niveau d'importance, pour un affichage compact
-function detritivoreFeedingSummary(items) {
+function detritivoreFeedingSummary(items, labels = DETRITIVORE_FOOD_LABELS) {
   const groups = { principal: [], complement: [], occasionnel: [], permanent: [] };
   (items || []).forEach((e) => {
-    const label = e.item === "autre" ? (e.precision?.trim() || "Autre") : DETRITIVORE_FOOD_LABELS[e.item];
+    const label = e.item === "autre" ? (e.precision?.trim() || "Autre") : labels[e.item];
     if (label && groups[e.importance]) groups[e.importance].push(label);
   });
   return groups;
@@ -7176,7 +7209,7 @@ function emptySpecies(groupe = "phasme") {
 
 const SECTION_ORDER = ["taxonomie", "identification", "conditions", "alimentation", "reproduction", "remarques"];
 
-function DetritivoreFeedingEditor({ items, onChange }) {
+function DetritivoreFeedingEditor({ items, onChange, categories = DETRITIVORE_FOOD_CATEGORIES, labels = DETRITIVORE_FOOD_LABELS }) {
   const entryFor = (id) => items.find((e) => e.item === id);
   const add = (id) => {
     if (!id || entryFor(id)) return;
@@ -7191,7 +7224,7 @@ function DetritivoreFeedingEditor({ items, onChange }) {
       <label className="field">
         <select value="" onChange={(e) => add(e.target.value)}>
           <option value="">+ Ajouter un aliment…</option>
-          {DETRITIVORE_FOOD_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <optgroup key={cat.category} label={cat.category}>
               {cat.items.filter((it) => !entryFor(it.id)).map((it) => (
                 <option key={it.id} value={it.id}>{it.label}</option>
@@ -7204,7 +7237,7 @@ function DetritivoreFeedingEditor({ items, onChange }) {
         <div className="detritivore-food-items">
           {items.map((entry) => (
             <div key={entry.item} className="detritivore-food-row">
-              <span className="detritivore-food-name">{DETRITIVORE_FOOD_LABELS[entry.item]}</span>
+              <span className="detritivore-food-name">{labels[entry.item]}</span>
               <select className="detritivore-importance-select" value={entry.importance} onChange={(e) => setImportance(entry.item, e.target.value)}>
                 {IMPORTANCE_LEVELS.map((lv) => <option key={lv.id} value={lv.id}>{lv.label}</option>)}
               </select>
@@ -7220,8 +7253,8 @@ function DetritivoreFeedingEditor({ items, onChange }) {
   );
 }
 
-function DetritivoreFeedingDisplay({ items }) {
-  const groups = detritivoreFeedingSummary(items);
+function DetritivoreFeedingDisplay({ items, labels = DETRITIVORE_FOOD_LABELS }) {
+  const groups = detritivoreFeedingSummary(items, labels);
   const rows = [
     ["Principale", groups.principal], ["Compléments", groups.complement],
     ["Occasionnelle", groups.occasionnel], ["Permanente", groups.permanent],
@@ -7244,8 +7277,8 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     if (!merged.taxo?.origine && merged.localite_origine) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
-    // Efface uniquement les anciens champs "acceptées/préférées" pour les détritivores (remplacés par la liste sélectionnable) — refusés/fréquence/toxiques restent en texte libre
-    if (DETRITIVORE_GROUPS.includes(merged.groupe) && (!section || section === "alimentation")) {
+    // Efface uniquement les anciens champs "acceptées/préférées" pour les détritivores/prédateurs (remplacés par la liste sélectionnable) — refusés/fréquence/toxiques restent en texte libre
+    if (feedingConfigFor(merged.groupe) && (!section || section === "alimentation")) {
       merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "" } };
     }
     return merged;
@@ -7308,9 +7341,9 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
 
         {show("alimentation") && (
         <Section title="Alimentation" icon={<Leaf size={15} />} defaultOpen={section === "alimentation"}>
-          {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
+          {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
             <>
-              <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} />
+              <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} categories={cfg.categories} labels={cfg.labels} />
               <div className="field-grid">
                 <Field label="Aliments refusés" value={sp.feeding.refusees} onChange={(v) => setSub("feeding", "refusees", v)} />
                 <Field label="Fréquence de nourrissage" value={sp.feeding.frequence} onChange={(v) => setSub("feeding", "frequence", v)} />
@@ -7320,7 +7353,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             </>
           ) : (
             <FieldGrid fields={FEEDING_FIELDS} obj={sp.feeding} onChange={(k, v) => setSub("feeding", k, v)} />
-          )}
+          ); })()}
         </Section>
         )}
 
@@ -7639,9 +7672,9 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <button className="btn-ghost-sm" onClick={() => setEditingSection("alimentation")}><Pencil size={14} /> Modifier cette section</button>
           </div>
           <div className="detail-grid">
-          {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
+          {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
             <>
-              <DetritivoreFeedingDisplay items={sp.feeding_structured} />
+              <DetritivoreFeedingDisplay items={sp.feeding_structured} labels={cfg.labels} />
               {sp.feeding?.refusees && <div className="kv kv-wide"><span className="kv-label">Aliments refusés</span><span className="kv-value">{sp.feeding.refusees}</span></div>}
               {sp.feeding?.frequence && <div className="kv kv-wide"><span className="kv-label">Fréquence de nourrissage</span><span className="kv-value">{sp.feeding.frequence}</span></div>}
               {sp.feeding?.toxiques && <div className="kv kv-wide"><span className="kv-label">Aliments potentiellement toxiques</span><span className="kv-value">{sp.feeding.toxiques}</span></div>}
@@ -7651,7 +7684,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             FEEDING_FIELDS.map(([k, label]) => sp.feeding?.[k] ? (
               <div className="kv kv-wide" key={k}><span className="kv-label">{label}</span><span className="kv-value">{sp.feeding[k]}</span></div>
             ) : null)
-          )}
+          ); })()}
           </div>
         </div>
       )}
@@ -7804,9 +7837,9 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
         <div className="print-sheet-section">
           <h2>Alimentation</h2>
           <div className="print-sheet-grid">
-            {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
+            {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
               (() => {
-                const g = detritivoreFeedingSummary(sp.feeding_structured);
+                const g = detritivoreFeedingSummary(sp.feeding_structured, cfg.labels);
                 const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
                   .filter(([, arr]) => arr.length > 0)
                   .map(([label, arr]) => <div key={label}><strong>{label}</strong>{arr.join(" · ")}</div>);
@@ -7817,9 +7850,9 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               })()
             ) : (
               FEEDING_FIELDS.map(([k, label]) => sp.feeding?.[k] ? <div key={k}><strong>{label}</strong>{sp.feeding[k]}</div> : null)
-            )}
+            ); })()}
           </div>
-          {DETRITIVORE_GROUPS.includes(sp.groupe) && sp.feeding?.remarques_alim && <p><strong>Notes : </strong>{sp.feeding.remarques_alim}</p>}
+          {feedingConfigFor(sp.groupe) && sp.feeding?.remarques_alim && <p><strong>Notes : </strong>{sp.feeding.remarques_alim}</p>}
         </div>
 
         <div className="print-sheet-section">
@@ -7909,9 +7942,9 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
 
             <div className="elv-block">
               <h2>Alimentation</h2>
-              {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
+              {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
                 (() => {
-                  const g = detritivoreFeedingSummary(sp.feeding_structured);
+                  const g = detritivoreFeedingSummary(sp.feeding_structured, cfg.labels);
                   const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
                     .filter(([, arr]) => arr.length > 0)
                     .map(([label, arr]) => <p key={label}><strong>{label} : </strong>{arr.join(" · ")}</p>);
@@ -7927,7 +7960,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
                   {sp.feeding?.frequence && <p><strong>Fréquence : </strong>{sp.feeding.frequence}</p>}
                   {sp.feeding?.toxiques && <p><strong>À éviter : </strong>{sp.feeding.toxiques}</p>}
                 </>
-              )}
+              ); })()}
             </div>
 
             {sp.conditions?.comportement && (
