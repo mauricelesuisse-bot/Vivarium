@@ -7178,37 +7178,44 @@ const SECTION_ORDER = ["taxonomie", "identification", "conditions", "alimentatio
 
 function DetritivoreFeedingEditor({ items, onChange }) {
   const entryFor = (id) => items.find((e) => e.item === id);
-  const toggle = (id) => {
-    if (entryFor(id)) onChange(items.filter((e) => e.item !== id));
-    else onChange([...items, { item: id, importance: "complement", precision: "" }]);
+  const add = (id) => {
+    if (!id || entryFor(id)) return;
+    onChange([...items, { item: id, importance: "complement", precision: "" }]);
   };
+  const remove = (id) => onChange(items.filter((e) => e.item !== id));
   const setImportance = (id, importance) => onChange(items.map((e) => (e.item === id ? { ...e, importance } : e)));
   const setPrecision = (id, precision) => onChange(items.map((e) => (e.item === id ? { ...e, precision } : e)));
+
   return (
     <div className="detritivore-food-editor">
-      {DETRITIVORE_FOOD_CATEGORIES.map((cat) => (
-        <div key={cat.category} className="detritivore-food-cat">
-          <span className="field-label">{cat.category}</span>
-          <div className="detritivore-food-items">
-            {cat.items.map((it) => {
-              const entry = entryFor(it.id);
-              return (
-                <div key={it.id} className="detritivore-food-row">
-                  <button type="button" className={`chip ${entry ? "chip-active" : ""}`} onClick={() => toggle(it.id)}>{it.label}</button>
-                  {entry && (
-                    <select className="detritivore-importance-select" value={entry.importance} onChange={(e) => setImportance(it.id, e.target.value)}>
-                      {IMPORTANCE_LEVELS.map((lv) => <option key={lv.id} value={lv.id}>{lv.label}</option>)}
-                    </select>
-                  )}
-                  {entry && it.id === "autre" && (
-                    <input className="detritivore-autre-input" placeholder="Précision…" value={entry.precision || ""} onChange={(e) => setPrecision(it.id, e.target.value)} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+      <label className="field">
+        <select value="" onChange={(e) => add(e.target.value)}>
+          <option value="">+ Ajouter un aliment…</option>
+          {DETRITIVORE_FOOD_CATEGORIES.map((cat) => (
+            <optgroup key={cat.category} label={cat.category}>
+              {cat.items.filter((it) => !entryFor(it.id)).map((it) => (
+                <option key={it.id} value={it.id}>{it.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      {items.length > 0 && (
+        <div className="detritivore-food-items">
+          {items.map((entry) => (
+            <div key={entry.item} className="detritivore-food-row">
+              <span className="detritivore-food-name">{DETRITIVORE_FOOD_LABELS[entry.item]}</span>
+              <select className="detritivore-importance-select" value={entry.importance} onChange={(e) => setImportance(entry.item, e.target.value)}>
+                {IMPORTANCE_LEVELS.map((lv) => <option key={lv.id} value={lv.id}>{lv.label}</option>)}
+              </select>
+              {entry.item === "autre" && (
+                <input className="detritivore-autre-input" placeholder="Précision…" value={entry.precision || ""} onChange={(e) => setPrecision(entry.item, e.target.value)} />
+              )}
+              <button type="button" className="icon-btn-sm" onClick={() => remove(entry.item)}><X size={12} /></button>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -7237,9 +7244,9 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     if (!merged.taxo?.origine && merged.localite_origine) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
-    // Efface les anciens champs alimentation en texte libre pour les détritivores, remplacés par la liste sélectionnable
+    // Efface uniquement les anciens champs "acceptées/préférées" pour les détritivores (remplacés par la liste sélectionnable) — refusés/fréquence/toxiques restent en texte libre
     if (DETRITIVORE_GROUPS.includes(merged.groupe) && (!section || section === "alimentation")) {
-      merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "", refusees: "", frequence: "", toxiques: "" } };
+      merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "" } };
     }
     return merged;
   });
@@ -7304,6 +7311,11 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
           {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
             <>
               <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} />
+              <div className="field-grid">
+                <Field label="Aliments refusés" value={sp.feeding.refusees} onChange={(v) => setSub("feeding", "refusees", v)} />
+                <Field label="Fréquence de nourrissage" value={sp.feeding.frequence} onChange={(v) => setSub("feeding", "frequence", v)} />
+              </div>
+              <Field label="Aliments potentiellement toxiques" value={sp.feeding.toxiques} onChange={(v) => setSub("feeding", "toxiques", v)} />
               <Field label="Notes sur l'alimentation" type="textarea" value={sp.feeding.remarques_alim} onChange={(v) => setSub("feeding", "remarques_alim", v)} />
             </>
           ) : (
@@ -7630,6 +7642,9 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
             <>
               <DetritivoreFeedingDisplay items={sp.feeding_structured} />
+              {sp.feeding?.refusees && <div className="kv kv-wide"><span className="kv-label">Aliments refusés</span><span className="kv-value">{sp.feeding.refusees}</span></div>}
+              {sp.feeding?.frequence && <div className="kv kv-wide"><span className="kv-label">Fréquence de nourrissage</span><span className="kv-value">{sp.feeding.frequence}</span></div>}
+              {sp.feeding?.toxiques && <div className="kv kv-wide"><span className="kv-label">Aliments potentiellement toxiques</span><span className="kv-value">{sp.feeding.toxiques}</span></div>}
               {sp.feeding?.remarques_alim && <div className="kv kv-wide"><span className="kv-label">Notes sur l'alimentation</span><span className="kv-value">{sp.feeding.remarques_alim}</span></div>}
             </>
           ) : (
@@ -7792,9 +7807,13 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
               (() => {
                 const g = detritivoreFeedingSummary(sp.feeding_structured);
-                return [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
+                const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
                   .filter(([, arr]) => arr.length > 0)
                   .map(([label, arr]) => <div key={label}><strong>{label}</strong>{arr.join(" · ")}</div>);
+                if (sp.feeding?.refusees) rows.push(<div key="refusees"><strong>Aliments refusés</strong>{sp.feeding.refusees}</div>);
+                if (sp.feeding?.frequence) rows.push(<div key="frequence"><strong>Fréquence</strong>{sp.feeding.frequence}</div>);
+                if (sp.feeding?.toxiques) rows.push(<div key="toxiques"><strong>Toxiques</strong>{sp.feeding.toxiques}</div>);
+                return rows;
               })()
             ) : (
               FEEDING_FIELDS.map(([k, label]) => sp.feeding?.[k] ? <div key={k}><strong>{label}</strong>{sp.feeding[k]}</div> : null)
@@ -7893,9 +7912,13 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               {DETRITIVORE_GROUPS.includes(sp.groupe) ? (
                 (() => {
                   const g = detritivoreFeedingSummary(sp.feeding_structured);
-                  return [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
+                  const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
                     .filter(([, arr]) => arr.length > 0)
                     .map(([label, arr]) => <p key={label}><strong>{label} : </strong>{arr.join(" · ")}</p>);
+                  if (sp.feeding?.refusees) rows.push(<p key="refusees"><strong>Refusés : </strong>{sp.feeding.refusees}</p>);
+                  if (sp.feeding?.frequence) rows.push(<p key="frequence"><strong>Fréquence : </strong>{sp.feeding.frequence}</p>);
+                  if (sp.feeding?.toxiques) rows.push(<p key="toxiques"><strong>À éviter : </strong>{sp.feeding.toxiques}</p>);
+                  return rows;
                 })()
               ) : (
                 <>
@@ -9421,16 +9444,16 @@ input,select,textarea{ font-family:inherit; }
 .search-box input{ background:transparent; border:none; outline:none; color:var(--text); width:100%; font-size:13.5px; }
 .search-box-lg{ padding:13px 16px; max-width:520px; }
 .chip-row{ display:flex; flex-wrap:wrap; gap:7px; }
-.detritivore-food-editor{ display:flex; flex-direction:column; gap:16px; margin-bottom:14px; }
-.detritivore-food-cat .field-label{ display:block; margin-bottom:8px; }
-.detritivore-food-items{ display:flex; flex-direction:column; gap:6px; }
-.detritivore-food-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.detritivore-food-editor{ display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+.detritivore-food-items{ display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+.detritivore-food-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 8px; background:var(--bg-soft); border-radius:var(--radius-sm); }
+.detritivore-food-name{ font-size:13px; flex:1; min-width:100px; }
 .detritivore-importance-select{
-  background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:var(--radius-sm);
+  background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius-sm);
   padding:5px 8px; color:var(--text); font-size:12px;
 }
 .detritivore-autre-input{
-  background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:var(--radius-sm);
+  background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius-sm);
   padding:5px 8px; color:var(--text); font-size:12px; flex:1; min-width:140px;
 }
 .difficulte-tag{
