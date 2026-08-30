@@ -7232,11 +7232,16 @@ function DetritivoreFeedingDisplay({ items }) {
 function SpeciesFormModal({ initial, onSave, onClose, section }) {
   const [sp, setSp] = useState(() => {
     const base = initial || emptySpecies();
+    let merged = base;
     // Fusionne l'ancienne "Localité d'origine" dans "Origine géographique" si celle-ci est encore vide, pour ne perdre aucune donnée déjà saisie
-    if (!base.taxo?.origine && base.localite_origine) {
-      return { ...base, taxo: { ...base.taxo, origine: base.localite_origine } };
+    if (!merged.taxo?.origine && merged.localite_origine) {
+      merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
-    return base;
+    // Efface les anciens champs alimentation en texte libre pour les détritivores, remplacés par la liste sélectionnable
+    if (DETRITIVORE_GROUPS.includes(merged.groupe) && (!section || section === "alimentation")) {
+      merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "", refusees: "", frequence: "", toxiques: "" } };
+    }
+    return merged;
   });
   const set = (k, v) => setSp((s) => ({ ...s, [k]: v }));
   const setSub = (branch, k, v) => setSp((s) => ({ ...s, [branch]: { ...s[branch], [k]: v } }));
@@ -7300,9 +7305,6 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             <>
               <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} />
               <Field label="Notes sur l'alimentation" type="textarea" value={sp.feeding.remarques_alim} onChange={(v) => setSub("feeding", "remarques_alim", v)} />
-              {(sp.feeding.acceptees || sp.feeding.preferees || sp.feeding.refusees || sp.feeding.frequence || sp.feeding.toxiques) && (
-                <p className="muted small-note">D'anciennes données en texte libre existent encore sur cette fiche — elles restent visibles en lecture sur la page, mais ne sont plus modifiables ici (nouveau système sélectionnable).</p>
-              )}
             </>
           ) : (
             <FieldGrid fields={FEEDING_FIELDS} obj={sp.feeding} onChange={(k, v) => setSub("feeding", k, v)} />
@@ -7629,9 +7631,6 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <>
               <DetritivoreFeedingDisplay items={sp.feeding_structured} />
               {sp.feeding?.remarques_alim && <div className="kv kv-wide"><span className="kv-label">Notes sur l'alimentation</span><span className="kv-value">{sp.feeding.remarques_alim}</span></div>}
-              {FEEDING_FIELDS.filter(([k]) => k !== "remarques_alim").map(([k, label]) => sp.feeding?.[k] ? (
-                <div className="kv kv-wide" key={k}><span className="kv-label">{label} (ancien champ)</span><span className="kv-value">{sp.feeding[k]}</span></div>
-              ) : null)}
             </>
           ) : (
             FEEDING_FIELDS.map(([k, label]) => sp.feeding?.[k] ? (
