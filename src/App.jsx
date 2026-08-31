@@ -170,6 +170,7 @@ const VENTILATION_LEVELS = [
   { id: "confinee", label: "Confinée — très peu de renouvellement d'air" },
   { id: "faible", label: "Faible — ventilation limitée" },
   { id: "moderee", label: "Modérée — ventilation standard" },
+  { id: "bonne", label: "Bonne — circulation d'air satisfaisante" },
   { id: "importante", label: "Importante — bonne circulation et renouvellement" },
   { id: "tres-importante", label: "Très importante — forte ventilation / terrarium très aéré" },
 ];
