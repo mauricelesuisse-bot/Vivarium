@@ -7305,6 +7305,10 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     if (!merged.taxo?.origine && merged.localite_origine) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
+    // Demande explicite : pour les blattes uniquement, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
+    if (merged.groupe === "blatte" && (!section || section === "conditions")) {
+      merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
+    }
     return merged;
   });
   const set = (k, v) => setSp((s) => ({ ...s, [k]: v }));
