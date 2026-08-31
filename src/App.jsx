@@ -7369,7 +7369,11 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
           {sp.conditions.type_terrarium && (
             <p className="muted small-note">Ancien champ « Type de terrarium » encore rempli : « {sp.conditions.type_terrarium} » — reste modifiable ci-dessous, à vider toi-même une fois le choix fait ci-dessus.</p>
           )}
-          <FieldGrid fields={CONDITIONS_FIELDS} obj={sp.conditions} onChange={(k, v) => setSub("conditions", k, v)} />
+          <FieldGrid
+            fields={sp.groupe === "blatte" ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
+            obj={sp.conditions}
+            onChange={(k, v) => setSub("conditions", k, v)}
+          />
           <Field label="Précautions particulières" type="textarea" value={sp.conditions.precautions} onChange={(v) => setSub("conditions", "precautions", v)} />
           <Field label="Risques éventuels" type="textarea" value={sp.conditions.risques} onChange={(v) => setSub("conditions", "risques", v)} />
           {sp.conditions.risques && (
