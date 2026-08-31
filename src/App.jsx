@@ -100,9 +100,16 @@ const PREY_FOOD_CATEGORIES = [
 const PREY_FOOD_LABELS = Object.fromEntries(PREY_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
 
 // Retourne la configuration du système alimentation structuré applicable au groupe (détritivore, prédateur, ou aucun = ancien système)
+// Même système, appliqué aux plantes nourricières des phasmes — reprend la liste FOOD_PLANTS déjà existante, "Autre" reste saisissable plusieurs fois (cas rares, plantes ponctuelles ne valant pas la peine d'être ajoutées à la liste)
+const PHASME_FOOD_CATEGORIES = [
+  { category: "Plantes nourricières", items: [...FOOD_PLANTS, { id: "autre", label: "Autre" }] },
+];
+const PHASME_FOOD_LABELS = Object.fromEntries(PHASME_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
+
 function feedingConfigFor(groupe) {
   if (DETRITIVORE_GROUPS.includes(groupe)) return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
   if (PREDATOR_GROUPS.includes(groupe)) return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
+  if (groupe === "phasme") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
   return null;
 }
 
@@ -147,6 +154,24 @@ const IMPORTANCE_LEVELS = [
   { id: "complement", label: "Complément" },
   { id: "occasionnel", label: "Occasionnel" },
   { id: "permanent", label: "Permanent" },
+];
+
+// Nouveau menu structuré pour le type de terrarium (choix unique, description générale — pas de marques) — coexiste avec l'ancien champ texte libre
+const TYPE_TERRARIUM_OPTIONS = [
+  { id: "verre", label: "Terrarium en verre" },
+  { id: "flexarium", label: "Flexarium / terrarium grillagé" },
+  { id: "boite-plastique", label: "Boîte plastique" },
+  { id: "bac-ouvert", label: "Bac ouvert" },
+  { id: "autre", label: "Autre" },
+];
+
+// Nouveau menu structuré pour la ventilation (choix unique) — coexiste avec l'ancien champ texte libre "ventilation", jamais effacé automatiquement
+const VENTILATION_LEVELS = [
+  { id: "confinee", label: "Confinée — très peu de renouvellement d'air" },
+  { id: "faible", label: "Faible — ventilation limitée" },
+  { id: "moderee", label: "Modérée — ventilation standard" },
+  { id: "importante", label: "Importante — bonne circulation et renouvellement" },
+  { id: "tres-importante", label: "Très importante — forte ventilation / terrarium très aéré" },
 ];
 
 // Regroupe les aliments sélectionnés par niveau d'importance, pour un affichage compact
@@ -7210,14 +7235,16 @@ function emptySpecies(groupe = "phasme") {
 const SECTION_ORDER = ["taxonomie", "identification", "conditions", "alimentation", "reproduction", "remarques"];
 
 function DetritivoreFeedingEditor({ items, onChange, categories = DETRITIVORE_FOOD_CATEGORIES, labels = DETRITIVORE_FOOD_LABELS }) {
-  const entryFor = (id) => items.find((e) => e.item === id);
+  const keyOf = (e) => e.id || e.item; // compat : anciennes entrées sans id, identifiées par leur item
+  const entryFor = (id) => items.find((e) => e.item === id && e.item !== "autre"); // "Autre" n'est jamais considéré comme "déjà pris" — répétable
   const add = (id) => {
-    if (!id || entryFor(id)) return;
-    onChange([...items, { item: id, importance: "complement", precision: "" }]);
+    if (!id) return;
+    if (id !== "autre" && entryFor(id)) return;
+    onChange([...items, { id: uid("feed"), item: id, importance: "complement", precision: "" }]);
   };
-  const remove = (id) => onChange(items.filter((e) => e.item !== id));
-  const setImportance = (id, importance) => onChange(items.map((e) => (e.item === id ? { ...e, importance } : e)));
-  const setPrecision = (id, precision) => onChange(items.map((e) => (e.item === id ? { ...e, precision } : e)));
+  const remove = (key) => onChange(items.filter((e) => keyOf(e) !== key));
+  const setImportance = (key, importance) => onChange(items.map((e) => (keyOf(e) === key ? { ...e, importance } : e)));
+  const setPrecision = (key, precision) => onChange(items.map((e) => (keyOf(e) === key ? { ...e, precision } : e)));
 
   return (
     <div className="detritivore-food-editor">
@@ -7226,7 +7253,7 @@ function DetritivoreFeedingEditor({ items, onChange, categories = DETRITIVORE_FO
           <option value="">+ Ajouter un aliment…</option>
           {categories.map((cat) => (
             <optgroup key={cat.category} label={cat.category}>
-              {cat.items.filter((it) => !entryFor(it.id)).map((it) => (
+              {cat.items.filter((it) => it.id === "autre" || !entryFor(it.id)).map((it) => (
                 <option key={it.id} value={it.id}>{it.label}</option>
               ))}
             </optgroup>
@@ -7236,15 +7263,15 @@ function DetritivoreFeedingEditor({ items, onChange, categories = DETRITIVORE_FO
       {items.length > 0 && (
         <div className="detritivore-food-items">
           {items.map((entry) => (
-            <div key={entry.item} className="detritivore-food-row">
+            <div key={keyOf(entry)} className="detritivore-food-row">
               <span className="detritivore-food-name">{labels[entry.item]}</span>
-              <select className="detritivore-importance-select" value={entry.importance} onChange={(e) => setImportance(entry.item, e.target.value)}>
+              <select className="detritivore-importance-select" value={entry.importance} onChange={(e) => setImportance(keyOf(entry), e.target.value)}>
                 {IMPORTANCE_LEVELS.map((lv) => <option key={lv.id} value={lv.id}>{lv.label}</option>)}
               </select>
               {entry.item === "autre" && (
-                <input className="detritivore-autre-input" placeholder="Précision…" value={entry.precision || ""} onChange={(e) => setPrecision(entry.item, e.target.value)} />
+                <input className="detritivore-autre-input" placeholder="Précision…" value={entry.precision || ""} onChange={(e) => setPrecision(keyOf(entry), e.target.value)} />
               )}
-              <button type="button" className="icon-btn-sm" onClick={() => remove(entry.item)}><X size={12} /></button>
+              <button type="button" className="icon-btn-sm" onClick={() => remove(keyOf(entry))}><X size={12} /></button>
             </div>
           ))}
         </div>
@@ -7276,10 +7303,6 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     // Fusionne l'ancienne "Localité d'origine" dans "Origine géographique" si celle-ci est encore vide, pour ne perdre aucune donnée déjà saisie
     if (!merged.taxo?.origine && merged.localite_origine) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
-    }
-    // Efface uniquement les anciens champs "acceptées/préférées" pour les détritivores/prédateurs (remplacés par la liste sélectionnable) — refusés/fréquence/toxiques restent en texte libre
-    if (feedingConfigFor(merged.groupe) && (!section || section === "alimentation")) {
-      merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "" } };
     }
     return merged;
   });
@@ -7329,7 +7352,18 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             {sp.groupe === "mante" && (
               <Field label="Cohabitation" type="select" options={COHABITATION_LEVELS} value={sp.conditions.cohabitation} onChange={(v) => setSub("conditions", "cohabitation", v)} />
             )}
+            <Field label="Ventilation (niveau)" type="select" options={VENTILATION_LEVELS} value={sp.conditions.ventilation_niveau} onChange={(v) => setSub("conditions", "ventilation_niveau", v)} />
+            <Field label="Type de terrarium (général)" type="select" options={TYPE_TERRARIUM_OPTIONS} value={sp.conditions.type_terrarium_niveau} onChange={(v) => setSub("conditions", "type_terrarium_niveau", v)} />
+            {sp.conditions.type_terrarium_niveau === "autre" && (
+              <Field label="Préciser le type de terrarium" value={sp.conditions.type_terrarium_precision} onChange={(v) => setSub("conditions", "type_terrarium_precision", v)} />
+            )}
           </div>
+          {sp.conditions.ventilation && (
+            <p className="muted small-note">Ancien champ « Ventilation » encore rempli : « {sp.conditions.ventilation} » — reste modifiable ci-dessous, à vider toi-même une fois le niveau choisi ci-dessus.</p>
+          )}
+          {sp.conditions.type_terrarium && (
+            <p className="muted small-note">Ancien champ « Type de terrarium » encore rempli : « {sp.conditions.type_terrarium} » — reste modifiable ci-dessous, à vider toi-même une fois le choix fait ci-dessus.</p>
+          )}
           <FieldGrid fields={CONDITIONS_FIELDS} obj={sp.conditions} onChange={(k, v) => setSub("conditions", k, v)} />
           <Field label="Précautions particulières" type="textarea" value={sp.conditions.precautions} onChange={(v) => setSub("conditions", "precautions", v)} />
           <Field label="Risques éventuels" type="textarea" value={sp.conditions.risques} onChange={(v) => setSub("conditions", "risques", v)} />
@@ -7350,6 +7384,13 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
               </div>
               <Field label="Aliments potentiellement toxiques" value={sp.feeding.toxiques} onChange={(v) => setSub("feeding", "toxiques", v)} />
               <Field label="Notes sur l'alimentation" type="textarea" value={sp.feeding.remarques_alim} onChange={(v) => setSub("feeding", "remarques_alim", v)} />
+              {(sp.feeding.acceptees || sp.feeding.preferees) && (
+                <div className="legacy-field-block">
+                  <p className="muted small-note">Ancien champ — à vérifier puis vider toi-même une fois la liste ci-dessus complétée. Rien n'est supprimé automatiquement.</p>
+                  <Field label="Ancien champ — Aliments acceptés" type="textarea" value={sp.feeding.acceptees} onChange={(v) => setSub("feeding", "acceptees", v)} />
+                  <Field label="Ancien champ — Aliments préférés" value={sp.feeding.preferees} onChange={(v) => setSub("feeding", "preferees", v)} />
+                </div>
+              )}
             </>
           ) : (
             <FieldGrid fields={FEEDING_FIELDS} obj={sp.feeding} onChange={(k, v) => setSub("feeding", k, v)} />
@@ -7658,8 +7699,14 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           {sp.groupe === "mante" && sp.conditions?.cohabitation && (
             <div className="kv"><span className="kv-label">Cohabitation</span><span className="kv-value">{COHABITATION_LEVELS.find((c) => c.id === sp.conditions.cohabitation)?.label}</span></div>
           )}
+          {sp.conditions?.ventilation_niveau && (
+            <div className="kv"><span className="kv-label">Ventilation (niveau)</span><span className="kv-value">{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</span></div>
+          )}
+          {sp.conditions?.type_terrarium_niveau && (
+            <div className="kv"><span className="kv-label">Type de terrarium</span><span className="kv-value">{sp.conditions.type_terrarium_niveau === "autre" ? (sp.conditions.type_terrarium_precision || "Autre") : TYPE_TERRARIUM_OPTIONS.find((t) => t.id === sp.conditions.type_terrarium_niveau)?.label}</span></div>
+          )}
           {CONDITIONS_FIELDS.map(([k, label]) => sp.conditions?.[k] ? (
-            <div className="kv" key={k}><span className="kv-label">{label}</span><span className="kv-value">{sp.conditions[k]}</span></div>
+            <div className="kv" key={k}><span className="kv-label">{k === "ventilation" ? "Ventilation (ancien champ)" : k === "type_terrarium" ? "Type de terrarium (ancien champ)" : label}</span><span className="kv-value">{sp.conditions[k]}</span></div>
           ) : null)}
           {sp.conditions?.precautions && <div className="kv kv-wide"><span className="kv-label">Précautions</span><span className="kv-value">{sp.conditions.precautions}</span></div>}
           </div>
@@ -7679,6 +7726,8 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               {sp.feeding?.frequence && <div className="kv kv-wide"><span className="kv-label">Fréquence de nourrissage</span><span className="kv-value">{sp.feeding.frequence}</span></div>}
               {sp.feeding?.toxiques && <div className="kv kv-wide"><span className="kv-label">Aliments potentiellement toxiques</span><span className="kv-value">{sp.feeding.toxiques}</span></div>}
               {sp.feeding?.remarques_alim && <div className="kv kv-wide"><span className="kv-label">Notes sur l'alimentation</span><span className="kv-value">{sp.feeding.remarques_alim}</span></div>}
+              {sp.feeding?.acceptees && <div className="kv kv-wide"><span className="kv-label">Ancien champ — Aliments acceptés</span><span className="kv-value">{sp.feeding.acceptees}</span></div>}
+              {sp.feeding?.preferees && <div className="kv kv-wide"><span className="kv-label">Ancien champ — Aliments préférés</span><span className="kv-value">{sp.feeding.preferees}</span></div>}
             </>
           ) : (
             FEEDING_FIELDS.map(([k, label]) => sp.feeding?.[k] ? (
@@ -7828,7 +7877,9 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="print-sheet-grid">
             {sp.taille_male && <div><strong>Taille (mâle)</strong>{sp.taille_male}</div>}
             {sp.taille_femelle && <div><strong>Taille (femelle)</strong>{sp.taille_femelle}</div>}
-            {CONDITIONS_FIELDS.map(([k, label]) => sp.conditions?.[k] ? <div key={k}><strong>{label}</strong>{sp.conditions[k]}</div> : null)}
+            {sp.conditions?.ventilation_niveau && <div><strong>Ventilation (niveau)</strong>{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</div>}
+            {sp.conditions?.type_terrarium_niveau && <div><strong>Type de terrarium</strong>{sp.conditions.type_terrarium_niveau === "autre" ? (sp.conditions.type_terrarium_precision || "Autre") : TYPE_TERRARIUM_OPTIONS.find((t) => t.id === sp.conditions.type_terrarium_niveau)?.label}</div>}
+            {CONDITIONS_FIELDS.map(([k, label]) => sp.conditions?.[k] ? <div key={k}><strong>{k === "ventilation" ? "Ventilation (ancien champ)" : k === "type_terrarium" ? "Type de terrarium (ancien champ)" : label}</strong>{sp.conditions[k]}</div> : null)}
           </div>
           {sp.conditions?.precautions && <p><strong>Précautions : </strong>{sp.conditions.precautions}</p>}
           {sp.conditions?.risques && <p><strong>Risques : </strong>{sp.conditions.risques}</p>}
@@ -9478,6 +9529,8 @@ input,select,textarea{ font-family:inherit; }
 .search-box-lg{ padding:13px 16px; max-width:520px; }
 .chip-row{ display:flex; flex-wrap:wrap; gap:7px; }
 .detritivore-food-editor{ display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+.legacy-field-block{ margin-top:14px; padding:10px 12px; border:1px dashed var(--border); border-radius:var(--radius-sm); background:rgba(184,90,62,0.06); }
+.legacy-field-block .small-note{ margin-top:0; margin-bottom:8px; }
 .detritivore-food-items{ display:flex; flex-direction:column; gap:6px; margin-top:4px; }
 .detritivore-food-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 8px; background:var(--bg-soft); border-radius:var(--radius-sm); }
 .detritivore-food-name{ font-size:13px; flex:1; min-width:100px; }
