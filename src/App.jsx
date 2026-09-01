@@ -37,6 +37,7 @@ const FOOD_PLANTS = [
   { id: "laurier-cerise", label: "Laurier-cerise" },
   { id: "fraisier", label: "Fraisier" },
   { id: "aubepine", label: "Aubépine" },
+  { id: "orme", label: "Orme" },
   { id: "fusain", label: "Fusain" },
 ];
 
@@ -7128,7 +7129,9 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
         if (statusesChecked && !statusFilters[sp.statut]) return false;
         if (dietFilter !== "all") {
           const foodText = normalizeText(`${sp.feeding?.acceptees || ""} ${sp.feeding?.preferees || ""}`);
-          if (!foodText.includes(normalizeText(dietFilter))) return false;
+          const matchesLegacy = foodText.includes(normalizeText(dietFilter));
+          const matchesStructured = (sp.feeding_structured || []).some((e) => e.item === dietFilter);
+          if (!matchesLegacy && !matchesStructured) return false;
         }
         if (q.trim()) {
           const hay = `${sp.sci_name} ${sp.common_name} ${sp.taxo?.famille || ""} ${sp.taxo?.ordre || ""}`.toLowerCase();
@@ -7311,13 +7314,15 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     if (merged.groupe === "blatte" && (!section || section === "conditions")) {
       merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
     }
-    // Convertit automatiquement une mention "aubépine" déjà saisie en texte libre vers le nouveau système sélectionnable — sans toucher au texte d'origine
+    // Convertit automatiquement toute plante de la liste déjà mentionnée dans l'ancien texte libre vers le nouveau système sélectionnable — sans toucher au texte d'origine
     if (merged.groupe === "phasme" && (!section || section === "alimentation")) {
-      const legacyText = `${merged.feeding?.acceptees || ""} ${merged.feeding?.preferees || ""}`.toLowerCase();
-      const hasAubepine = /aub[ée]pine/.test(legacyText);
-      const alreadyStructured = (merged.feeding_structured || []).some((e) => e.item === "aubepine");
-      if (hasAubepine && !alreadyStructured) {
-        merged = { ...merged, feeding_structured: [...(merged.feeding_structured || []), { id: uid("feed"), item: "aubepine", importance: "complement", precision: "" }] };
+      const legacyNorm = normalizeText(`${merged.feeding?.acceptees || ""} ${merged.feeding?.preferees || ""}`);
+      const existingIds = new Set((merged.feeding_structured || []).map((e) => e.item));
+      const newEntries = FOOD_PLANTS
+        .filter((p) => !existingIds.has(p.id) && legacyNorm.includes(normalizeText(p.label)))
+        .map((p) => ({ id: uid("feed"), item: p.id, importance: "complement", precision: "" }));
+      if (newEntries.length > 0) {
+        merged = { ...merged, feeding_structured: [...(merged.feeding_structured || []), ...newEntries] };
       }
     }
     return merged;
