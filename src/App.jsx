@@ -36,6 +36,7 @@ const FOOD_PLANTS = [
   { id: "lilas", label: "Lilas" },
   { id: "laurier-cerise", label: "Laurier-cerise" },
   { id: "fraisier", label: "Fraisier" },
+  { id: "aubepine", label: "Aubépine" },
   { id: "fusain", label: "Fusain" },
 ];
 
@@ -182,6 +183,7 @@ function detritivoreFeedingSummary(items, labels = DETRITIVORE_FOOD_LABELS) {
     const label = e.item === "autre" ? (e.precision?.trim() || "Autre") : labels[e.item];
     if (label && groups[e.importance]) groups[e.importance].push(label);
   });
+  Object.keys(groups).forEach((k) => groups[k].sort((a, b) => a.localeCompare(b, "fr")));
   return groups;
 }
 
@@ -7254,7 +7256,7 @@ function DetritivoreFeedingEditor({ items, onChange, categories = DETRITIVORE_FO
           <option value="">+ Ajouter un aliment…</option>
           {categories.map((cat) => (
             <optgroup key={cat.category} label={cat.category}>
-              {cat.items.filter((it) => it.id === "autre" || !entryFor(it.id)).map((it) => (
+              {[...cat.items].filter((it) => it.id === "autre" || !entryFor(it.id)).sort((a, b) => a.id === "autre" ? 1 : b.id === "autre" ? -1 : a.label.localeCompare(b.label, "fr")).map((it) => (
                 <option key={it.id} value={it.id}>{it.label}</option>
               ))}
             </optgroup>
@@ -7308,6 +7310,15 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     // Demande explicite : pour les blattes uniquement, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
     if (merged.groupe === "blatte" && (!section || section === "conditions")) {
       merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
+    }
+    // Convertit automatiquement une mention "aubépine" déjà saisie en texte libre vers le nouveau système sélectionnable — sans toucher au texte d'origine
+    if (merged.groupe === "phasme" && (!section || section === "alimentation")) {
+      const legacyText = `${merged.feeding?.acceptees || ""} ${merged.feeding?.preferees || ""}`.toLowerCase();
+      const hasAubepine = /aub[ée]pine/.test(legacyText);
+      const alreadyStructured = (merged.feeding_structured || []).some((e) => e.item === "aubepine");
+      if (hasAubepine && !alreadyStructured) {
+        merged = { ...merged, feeding_structured: [...(merged.feeding_structured || []), { id: uid("feed"), item: "aubepine", importance: "complement", precision: "" }] };
+      }
     }
     return merged;
   });
