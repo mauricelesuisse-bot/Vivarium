@@ -370,6 +370,15 @@ const INCUBATION_EVENTS = [
   { id: "autre", label: "Autre" },
 ];
 
+// Libellé du champ Quantité adapté au type d'événement sélectionné (œufs vs individus nés)
+const INCUBATION_QTY_LABELS = {
+  "recolte": "Quantité (œufs)",
+  "mise-incubation": "Quantité (œufs)",
+  "naissance": "Quantité (individus)",
+  "echec": "Quantité (œufs)",
+  "autre": "Quantité",
+};
+
 const MAINTENANCE_EVENTS = [
   { id: "refection-terrarium", label: "Réfection du terrarium" },
   { id: "changement-plante", label: "Changement de plante nourricière" },
@@ -8183,7 +8192,7 @@ function ObservationsPanel({ observations, onAdd, onRemove, onUpdate, terrariums
             />
           )}
           {isIncubation && (
-            <Field label="Quantité (œufs / individus)" type="number" value={form.quantity} onChange={(v) => setForm((f) => ({ ...f, quantity: v }))} />
+            <Field label={INCUBATION_QTY_LABELS[form.eventType] || "Quantité"} type="number" value={form.quantity} onChange={(v) => setForm((f) => ({ ...f, quantity: v }))} />
           )}
           {isMaintenance && terrariums && terrariums.length > 0 && (
             <Field
@@ -8475,6 +8484,154 @@ function emptyShelf() {
 
 function emptyFormat() {
   return { id: uid("fmt"), nom: "", code: "", largeur: "", profondeur: "", hauteur: "", categorie: "E" };
+}
+
+const DATE_PRESETS = [
+  { id: "today", label: "Aujourd'hui" },
+  { id: "week", label: "Cette semaine" },
+  { id: "month", label: "Ce mois" },
+  { id: "year", label: "Cette année" },
+  { id: "custom", label: "Personnalisé" },
+];
+
+function presetRange(preset) {
+  const now = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  if (preset === "today") return { from: iso(now), to: iso(now) };
+  if (preset === "week") {
+    const day = now.getDay() || 7; // lundi = 1 ... dimanche = 7
+    const monday = new Date(now); monday.setDate(now.getDate() - day + 1);
+    return { from: iso(monday), to: iso(now) };
+  }
+  if (preset === "month") {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: iso(first), to: iso(now) };
+  }
+  if (preset === "year") {
+    const first = new Date(now.getFullYear(), 0, 1);
+    return { from: iso(first), to: iso(now) };
+  }
+  return null;
+}
+
+// Agrège, pour toutes les espèces, les entrées Journal "Incubation" (récolte/naissance) dans une période donnée
+function hatchingStatsFor(data, from, to) {
+  const rows = [];
+  data.species.forEach((sp) => {
+    let oeufs = 0, eclosions = 0;
+    (sp.observations || []).forEach((o) => {
+      if (o.category !== "Incubation") return;
+      if (o.date < from || o.date > to) return;
+      const qty = Number(o.quantity) || 0;
+      if (!qty) return;
+      if (o.eventType === "recolte") oeufs += qty;
+      if (o.eventType === "naissance") eclosions += qty;
+    });
+    if (oeufs > 0 || eclosions > 0) rows.push({ sp, oeufs, eclosions });
+  });
+  return rows.sort((a, b) => (a.sp.sci_name || "").localeCompare(b.sp.sci_name || "", "fr"));
+}
+
+function HatchingStatsPage({ data, onNavigate }) {
+  const [preset, setPreset] = useState("today");
+  const [metric, setMetric] = useState("all"); // all | oeufs | eclosions
+  const todayIso = todayISO();
+  const [customFrom, setCustomFrom] = useState(todayIso);
+  const [customTo, setCustomTo] = useState(todayIso);
+
+  const range = preset === "custom" ? { from: customFrom, to: customTo } : presetRange(preset);
+  const allRows = hatchingStatsFor(data, range.from, range.to);
+  const rows = allRows.filter((r) => metric === "all" ? true : metric === "oeufs" ? r.oeufs > 0 : r.eclosions > 0);
+  const totalOeufs = rows.reduce((s, r) => s + r.oeufs, 0);
+  const totalEclosions = rows.reduce((s, r) => s + r.eclosions, 0);
+  const showOeufs = metric !== "eclosions";
+  const showEclosions = metric !== "oeufs";
+
+  const printStats = () => { document.body.classList.remove("print-mode-full", "print-mode-elevage", "print-mode-inventory"); document.body.classList.add("print-mode-hatching"); window.print(); };
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div><Eyebrow>Journal</Eyebrow><h1>Éclosions & œufs récoltés</h1></div>
+        <button className="btn-ghost-sm no-print" onClick={printStats}><Printer size={14} /> Exporter en PDF</button>
+      </div>
+
+      <div className="chip-row no-print" style={{ marginBottom: 10 }}>
+        {DATE_PRESETS.map((p) => (
+          <button key={p.id} type="button" className={`chip ${preset === p.id ? "chip-active" : ""}`} onClick={() => setPreset(p.id)}>{p.label}</button>
+        ))}
+      </div>
+      {preset === "custom" && (
+        <div className="field-grid no-print" style={{ marginBottom: 14 }}>
+          <Field label="Du" type="date" value={customFrom} onChange={setCustomFrom} />
+          <Field label="Au" type="date" value={customTo} onChange={setCustomTo} />
+        </div>
+      )}
+
+      <div className="chip-row no-print" style={{ marginBottom: 14 }}>
+        <button type="button" className={`chip ${metric === "all" ? "chip-active" : ""}`} onClick={() => setMetric("all")}>Œufs + éclosions</button>
+        <button type="button" className={`chip ${metric === "oeufs" ? "chip-active" : ""}`} onClick={() => setMetric("oeufs")}>Œufs récoltés uniquement</button>
+        <button type="button" className={`chip ${metric === "eclosions" ? "chip-active" : ""}`} onClick={() => setMetric("eclosions")}>Éclosions uniquement</button>
+      </div>
+
+      <p className="muted no-print" style={{ marginBottom: 16 }}>
+        Période : {fmtDate(range.from)} — {fmtDate(range.to)}{showOeufs ? ` · ${totalOeufs} œuf(s) récolté(s)` : ""}{showEclosions ? ` · ${totalEclosions} éclosion(s)` : ""}
+      </p>
+
+      {rows.length === 0 ? (
+        <div className="empty-state no-print"><Egg size={26} strokeWidth={1.2} /><p>Aucune donnée enregistrée sur cette période pour ce filtre.</p></div>
+      ) : (
+        <div className="obs-list no-print">
+          {rows.map(({ sp, oeufs, eclosions }) => (
+            <div className="obs-item" key={sp.id}>
+              <div className="obs-item-head">
+                <button className="link-btn" onClick={() => onNavigate(sp.id)}><SpeciesName sp={sp} /></button>
+                {showOeufs && oeufs > 0 && <span className="meta-tag">Œufs récoltés : {oeufs}</span>}
+                {showEclosions && eclosions > 0 && <span className="meta-tag">Éclosions : {eclosions}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="hatch-sheet">
+        <div className="hatch-header">
+          <img src={LOGO_DATA_URI} alt="" />
+          <div>
+            <h1>Éclosions & œufs récoltés</h1>
+            <p>phasmes.ch — Période : {fmtDate(range.from)} — {fmtDate(range.to)}</p>
+          </div>
+        </div>
+        <table className="hatch-table">
+          <thead>
+            <tr>
+              <th>Espèce</th>
+              {showOeufs && <th>Œufs récoltés</th>}
+              {showEclosions && <th>Éclosions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ sp, oeufs, eclosions }) => (
+              <tr key={sp.id}>
+                <td><ScientificNameText text={sp.sci_name} />{sp.localite_culture ? ` "${sp.localite_culture}"` : ""}</td>
+                {showOeufs && <td>{oeufs || "–"}</td>}
+                {showEclosions && <td>{eclosions || "–"}</td>}
+              </tr>
+            ))}
+            <tr className="hatch-total-row">
+              <td><strong>Total</strong></td>
+              {showOeufs && <td><strong>{totalOeufs}</strong></td>}
+              {showEclosions && <td><strong>{totalEclosions}</strong></td>}
+            </tr>
+          </tbody>
+        </table>
+        <div className="hatch-footer">
+          <span>© {new Date().getFullYear()} phasmes.ch — Vivarium</span>
+          <span>Généré le {fmtDate(todayIso)}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PriceListPage({ data, onNavigate }) {
@@ -9350,6 +9507,7 @@ const NAV = [
   { id: "species", label: "Espèces", icon: Bug },
   { id: "terrariums", label: "Terrariums", icon: Box },
   { id: "pricelist", label: "Liste de prix", icon: Tag },
+  { id: "hatching-stats", label: "Éclosions", icon: Egg },
   { id: "history", label: "Historique", icon: HistoryIcon },
   { id: "tasks", label: "Interventions", icon: ListChecks },
   { id: "shopping", label: "Liste de courses", icon: ShoppingCart },
@@ -9430,6 +9588,7 @@ export default function App() {
             )}
             {view.page === "terrariums" && <TerrariumsPage data={data} setData={setData} />}
             {view.page === "pricelist" && <PriceListPage data={data} onNavigate={goSpecies} />}
+            {view.page === "hatching-stats" && <HatchingStatsPage data={data} onNavigate={goSpecies} />}
             {view.page === "history" && <HistoryPage data={data} setData={setData} />}
             {view.page === "tasks" && <TasksPage data={data} setData={setData} />}
             {view.page === "shopping" && <ShoppingListPage data={data} setData={setData} />}
@@ -9891,6 +10050,21 @@ input,select,textarea{ font-family:inherit; }
   .inv-table th{ text-align:left; font-size:8.5px; text-transform:uppercase; letter-spacing:0.03em; color:#444; border-bottom:1.5px solid #888; padding:4px 6px; background:#f0ede4; }
   .inv-table td{ padding:4px 6px; border-bottom:1px solid #ddd; color:#111; }
   .inv-table td i{ font-style:italic; }
+
+  /* --- Éclosions & œufs récoltés --- */
+  body.print-mode-hatching .hatch-sheet{ display:block; color:#111; }
+  .hatch-header{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .hatch-header img{ width:28px; height:28px; object-fit:contain; }
+  .hatch-header h1{ font-size:18px; margin:0; color:#111; }
+  .hatch-header p{ font-size:9.5px; margin:2px 0 0; color:#555; }
+  .hatch-table{ width:100%; border-collapse:collapse; font-size:10px; }
+  .hatch-table thead{ display:table-header-group; }
+  .hatch-table tr{ break-inside:avoid; }
+  .hatch-table th{ text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:0.03em; color:#444; border-bottom:1.5px solid #888; padding:5px 6px; background:#f0ede4; }
+  .hatch-table td{ padding:5px 6px; border-bottom:1px solid #ddd; color:#111; }
+  .hatch-total-row td{ border-top:1.5px solid #888; border-bottom:none; padding-top:7px; }
+  .hatch-footer{ display:flex; justify-content:space-between; margin-top:14px; padding-top:8px; border-top:1px solid #ccc; font-size:8.5px; color:#666; font-family:'IBM Plex Mono',monospace; }
 }
 .inv-sheet{ display:none; }
+.hatch-sheet{ display:none; }
 `;
