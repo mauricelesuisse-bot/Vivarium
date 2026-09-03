@@ -8486,6 +8486,41 @@ function emptyFormat() {
   return { id: uid("fmt"), nom: "", code: "", largeur: "", profondeur: "", hauteur: "", categorie: "E" };
 }
 
+const MOIS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+function monthKey(dateStr) { return (dateStr || "").slice(0, 7); } // "2026-08"
+function monthLabel(key) {
+  const [y, m] = key.split("-").map(Number);
+  return `${MOIS_FR[m - 1]} ${y}`;
+}
+function monthBounds(key) {
+  const [y, m] = key.split("-").map(Number);
+  const from = `${key}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const to = `${key}-${String(lastDay).padStart(2, "0")}`;
+  return { from, to };
+}
+// Fige un rapport mensuel (œufs récoltés/mis en incubation, puis éclosions) à partir du journal — snapshot indépendant de l'état futur des fiches
+function buildMonthlyReport(data, key) {
+  const { from, to } = monthBounds(key);
+  const rows = [];
+  data.species.forEach((sp) => {
+    let oeufs = 0, eclosions = 0;
+    (sp.observations || []).forEach((o) => {
+      if (o.category !== "Incubation") return;
+      if (o.date < from || o.date > to) return;
+      const qty = Number(o.quantity) || 0;
+      if (!qty) return;
+      if (o.eventType === "recolte" || o.eventType === "mise-incubation") oeufs += qty;
+      if (o.eventType === "naissance") eclosions += qty;
+    });
+    if (oeufs > 0 || eclosions > 0) {
+      rows.push({ spId: sp.id, sciName: sp.sci_name, localite: sp.localite_culture || "", oeufs, eclosions });
+    }
+  });
+  rows.sort((a, b) => (a.sciName || "").localeCompare(b.sciName || "", "fr"));
+  return { id: uid("report"), month: key, label: monthLabel(key), generatedAt: new Date().toISOString(), rows };
+}
+
 const DATE_PRESETS = [
   { id: "today", label: "Aujourd'hui" },
   { id: "week", label: "Cette semaine" },
@@ -8532,31 +8567,100 @@ function hatchingStatsFor(data, from, to) {
   return rows.sort((a, b) => (a.sp.sci_name || "").localeCompare(b.sp.sci_name || "", "fr"));
 }
 
-function HatchingStatsPage({ data, onNavigate }) {
+function ReportSheet({ title, periodLabel, oeufsRows, eclosionsRows, footerNote }) {
+  const totalOeufs = oeufsRows.reduce((s, r) => s + r.oeufs, 0);
+  const totalEclosions = eclosionsRows.reduce((s, r) => s + r.eclosions, 0);
+  return (
+    <>
+      <div className="hatch-header">
+        <img src={LOGO_DATA_URI} alt="" />
+        <div>
+          <h1>{title}</h1>
+          <p>phasmes.ch — {periodLabel}</p>
+        </div>
+      </div>
+
+      <h2 className="hatch-section-title">Œufs récoltés / mis en incubation</h2>
+      {oeufsRows.length === 0 ? <p className="hatch-empty">Aucun œuf récolté ou mis en incubation sur cette période.</p> : (
+        <table className="hatch-table">
+          <thead><tr><th>Espèce</th><th>Quantité</th></tr></thead>
+          <tbody>
+            {oeufsRows.map((r) => (
+              <tr key={r.spId || r.sciName}>
+                <td><ScientificNameText text={r.sciName} />{r.localite ? ` "${r.localite}"` : ""}</td>
+                <td>{r.oeufs}</td>
+              </tr>
+            ))}
+            <tr className="hatch-total-row"><td><strong>Total</strong></td><td><strong>{totalOeufs}</strong></td></tr>
+          </tbody>
+        </table>
+      )}
+
+      <h2 className="hatch-section-title">Éclosions</h2>
+      {eclosionsRows.length === 0 ? <p className="hatch-empty">Aucune éclosion enregistrée sur cette période.</p> : (
+        <table className="hatch-table">
+          <thead><tr><th>Espèce</th><th>Quantité</th></tr></thead>
+          <tbody>
+            {eclosionsRows.map((r) => (
+              <tr key={r.spId || r.sciName}>
+                <td><ScientificNameText text={r.sciName} />{r.localite ? ` "${r.localite}"` : ""}</td>
+                <td>{r.eclosions}</td>
+              </tr>
+            ))}
+            <tr className="hatch-total-row"><td><strong>Total</strong></td><td><strong>{totalEclosions}</strong></td></tr>
+          </tbody>
+        </table>
+      )}
+
+      <div className="hatch-footer">
+        <span>© {new Date().getFullYear()} phasmes.ch — Vivarium</span>
+        <span>{footerNote}</span>
+      </div>
+    </>
+  );
+}
+
+function HatchingStatsPage({ data, setData, onNavigate }) {
   const [preset, setPreset] = useState("today");
-  const [metric, setMetric] = useState("all"); // all | oeufs | eclosions
   const todayIso = todayISO();
   const [customFrom, setCustomFrom] = useState(todayIso);
   const [customTo, setCustomTo] = useState(todayIso);
+  const [printTarget, setPrintTarget] = useState(null); // null = période en cours ; sinon un rapport de la bibliothèque
+  const [manualMonth, setManualMonth] = useState(todayIso.slice(0, 7));
 
   const range = preset === "custom" ? { from: customFrom, to: customTo } : presetRange(preset);
   const allRows = hatchingStatsFor(data, range.from, range.to);
-  const rows = allRows.filter((r) => metric === "all" ? true : metric === "oeufs" ? r.oeufs > 0 : r.eclosions > 0);
-  const totalOeufs = rows.reduce((s, r) => s + r.oeufs, 0);
-  const totalEclosions = rows.reduce((s, r) => s + r.eclosions, 0);
-  const showOeufs = metric !== "eclosions";
-  const showEclosions = metric !== "oeufs";
+  const oeufsRows = allRows.filter((r) => r.oeufs > 0).map((r) => ({ spId: r.sp.id, sciName: r.sp.sci_name, localite: r.sp.localite_culture, oeufs: r.oeufs }));
+  const eclosionsRows = allRows.filter((r) => r.eclosions > 0).map((r) => ({ spId: r.sp.id, sciName: r.sp.sci_name, localite: r.sp.localite_culture, eclosions: r.eclosions }));
 
-  const printStats = () => { document.body.classList.remove("print-mode-full", "print-mode-elevage", "print-mode-inventory"); document.body.classList.add("print-mode-hatching"); window.print(); };
+  const reports = (data.hatchingReports || []).slice().sort((a, b) => b.month.localeCompare(a.month));
+
+  const printLive = () => {
+    setPrintTarget(null);
+    document.body.classList.remove("print-mode-full", "print-mode-elevage", "print-mode-inventory");
+    document.body.classList.add("print-mode-hatching");
+    setTimeout(() => window.print(), 0);
+  };
+  const printReport = (report) => {
+    setPrintTarget(report);
+    document.body.classList.remove("print-mode-full", "print-mode-elevage", "print-mode-inventory");
+    document.body.classList.add("print-mode-hatching");
+    setTimeout(() => window.print(), 0);
+  };
+  const generateForMonth = () => {
+    if ((data.hatchingReports || []).some((r) => r.month === manualMonth)) return;
+    const report = buildMonthlyReport(data, manualMonth);
+    setData((d) => ({ ...d, hatchingReports: [...(d.hatchingReports || []), report] }));
+  };
 
   return (
     <div className="page">
       <div className="page-head">
-        <div><Eyebrow>Journal</Eyebrow><h1>Éclosions & œufs récoltés</h1></div>
-        <button className="btn-ghost-sm no-print" onClick={printStats}><Printer size={14} /> Exporter en PDF</button>
+        <div><Eyebrow>Journal</Eyebrow><h1>Éclosions & incubation</h1></div>
+        <button className="btn-ghost-sm no-print" onClick={printLive}><Printer size={14} /> Exporter la période affichée</button>
       </div>
 
-      <div className="chip-row no-print" style={{ marginBottom: 10 }}>
+      <div className="chip-row no-print" style={{ marginBottom: 14 }}>
         {DATE_PRESETS.map((p) => (
           <button key={p.id} type="button" className={`chip ${preset === p.id ? "chip-active" : ""}`} onClick={() => setPreset(p.id)}>{p.label}</button>
         ))}
@@ -8568,71 +8672,89 @@ function HatchingStatsPage({ data, onNavigate }) {
         </div>
       )}
 
-      <div className="chip-row no-print" style={{ marginBottom: 14 }}>
-        <button type="button" className={`chip ${metric === "all" ? "chip-active" : ""}`} onClick={() => setMetric("all")}>Œufs + éclosions</button>
-        <button type="button" className={`chip ${metric === "oeufs" ? "chip-active" : ""}`} onClick={() => setMetric("oeufs")}>Œufs récoltés uniquement</button>
-        <button type="button" className={`chip ${metric === "eclosions" ? "chip-active" : ""}`} onClick={() => setMetric("eclosions")}>Éclosions uniquement</button>
+      <p className="muted no-print" style={{ marginBottom: 16 }}>Période : {fmtDate(range.from)} — {fmtDate(range.to)}</p>
+
+      <div className="no-print">
+        <div className="panel">
+          <div className="panel-head">Œufs récoltés / mis en incubation</div>
+          {oeufsRows.length === 0 ? <div className="empty-state"><p>Aucun sur cette période.</p></div> : (
+            <div className="obs-list">
+              {oeufsRows.map((r) => (
+                <div className="obs-item" key={r.spId}>
+                  <div className="obs-item-head">
+                    <button className="link-btn" onClick={() => onNavigate(r.spId)}><SpeciesName sp={{ sci_name: r.sciName, localite_culture: r.localite }} /></button>
+                    <span className="meta-tag">{r.oeufs}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div className="panel-head">Éclosions</div>
+          {eclosionsRows.length === 0 ? <div className="empty-state"><p>Aucune sur cette période.</p></div> : (
+            <div className="obs-list">
+              {eclosionsRows.map((r) => (
+                <div className="obs-item" key={r.spId}>
+                  <div className="obs-item-head">
+                    <button className="link-btn" onClick={() => onNavigate(r.spId)}><SpeciesName sp={{ sci_name: r.sciName, localite_culture: r.localite }} /></button>
+                    <span className="meta-tag">{r.eclosions}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div className="panel-head">Bibliothèque des rapports mensuels</div>
+          <p className="muted small-note">Générés automatiquement à l'ouverture de l'app pour chaque mois écoulé. Tu peux aussi en forcer un manuellement ci-dessous.</p>
+          <div className="field-grid" style={{ marginTop: 10 }}>
+            <Field label="Générer/regénérer pour le mois" type="month" value={manualMonth} onChange={setManualMonth} />
+          </div>
+          <button className="btn-ghost-sm" onClick={generateForMonth}><Plus size={14} /> Générer ce mois</button>
+          {reports.length === 0 ? (
+            <div className="empty-state" style={{ marginTop: 14 }}><p>Aucun rapport enregistré pour l'instant.</p></div>
+          ) : (
+            <div className="obs-list" style={{ marginTop: 14 }}>
+              {reports.map((r) => (
+                <div className="obs-item" key={r.id}>
+                  <div className="obs-item-head">
+                    <span className="obs-title">{r.label}</span>
+                    <span className="meta-tag">{r.rows.reduce((s, x) => s + x.oeufs, 0)} œufs</span>
+                    <span className="meta-tag">{r.rows.reduce((s, x) => s + x.eclosions, 0)} éclosions</span>
+                    <button className="btn-ghost-sm" onClick={() => printReport(r)}><Printer size={13} /> PDF</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      <p className="muted no-print" style={{ marginBottom: 16 }}>
-        Période : {fmtDate(range.from)} — {fmtDate(range.to)}{showOeufs ? ` · ${totalOeufs} œuf(s) récolté(s)` : ""}{showEclosions ? ` · ${totalEclosions} éclosion(s)` : ""}
-      </p>
-
-      {rows.length === 0 ? (
-        <div className="empty-state no-print"><Egg size={26} strokeWidth={1.2} /><p>Aucune donnée enregistrée sur cette période pour ce filtre.</p></div>
-      ) : (
-        <div className="obs-list no-print">
-          {rows.map(({ sp, oeufs, eclosions }) => (
-            <div className="obs-item" key={sp.id}>
-              <div className="obs-item-head">
-                <button className="link-btn" onClick={() => onNavigate(sp.id)}><SpeciesName sp={sp} /></button>
-                {showOeufs && oeufs > 0 && <span className="meta-tag">Œufs récoltés : {oeufs}</span>}
-                {showEclosions && eclosions > 0 && <span className="meta-tag">Éclosions : {eclosions}</span>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div className="hatch-sheet">
-        <div className="hatch-header">
-          <img src={LOGO_DATA_URI} alt="" />
-          <div>
-            <h1>Éclosions & œufs récoltés</h1>
-            <p>phasmes.ch — Période : {fmtDate(range.from)} — {fmtDate(range.to)}</p>
-          </div>
-        </div>
-        <table className="hatch-table">
-          <thead>
-            <tr>
-              <th>Espèce</th>
-              {showOeufs && <th>Œufs récoltés</th>}
-              {showEclosions && <th>Éclosions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ sp, oeufs, eclosions }) => (
-              <tr key={sp.id}>
-                <td><ScientificNameText text={sp.sci_name} />{sp.localite_culture ? ` "${sp.localite_culture}"` : ""}</td>
-                {showOeufs && <td>{oeufs || "–"}</td>}
-                {showEclosions && <td>{eclosions || "–"}</td>}
-              </tr>
-            ))}
-            <tr className="hatch-total-row">
-              <td><strong>Total</strong></td>
-              {showOeufs && <td><strong>{totalOeufs}</strong></td>}
-              {showEclosions && <td><strong>{totalEclosions}</strong></td>}
-            </tr>
-          </tbody>
-        </table>
-        <div className="hatch-footer">
-          <span>© {new Date().getFullYear()} phasmes.ch — Vivarium</span>
-          <span>Généré le {fmtDate(todayIso)}</span>
-        </div>
+        {printTarget ? (
+          <ReportSheet
+            title="Éclosions & incubation"
+            periodLabel={printTarget.label}
+            oeufsRows={printTarget.rows.filter((r) => r.oeufs > 0)}
+            eclosionsRows={printTarget.rows.filter((r) => r.eclosions > 0)}
+            footerNote={`Généré le ${fmtDate(printTarget.generatedAt.slice(0, 10))}`}
+          />
+        ) : (
+          <ReportSheet
+            title="Éclosions & incubation"
+            periodLabel={`Période : ${fmtDate(range.from)} — ${fmtDate(range.to)}`}
+            oeufsRows={oeufsRows}
+            eclosionsRows={eclosionsRows}
+            footerNote={`Généré le ${fmtDate(todayIso)}`}
+          />
+        )}
       </div>
     </div>
   );
 }
+
 
 function PriceListPage({ data, onNavigate }) {
   const withTarifs = data.species.filter((s) => (s.tarifs || []).length > 0);
@@ -9528,6 +9650,34 @@ export default function App() {
 
   const terrariumsOf = (sp) => (data ? data.terrariums.filter((t) => sp.terrarium_ids?.includes(t.id) || t.species_ids?.includes(sp.id)) : []);
 
+  // Génère automatiquement, à l'ouverture de l'app, le rapport mensuel éclosions/incubation du (ou des) mois précédent(s) manquant(s)
+  useEffect(() => {
+    if (!data) return;
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const existing = data.hatchingReports || [];
+    // Détermine le premier mois avec au moins une entrée Incubation, pour ne pas backfiller au-delà
+    let earliestKey = null;
+    data.species.forEach((sp) => (sp.observations || []).forEach((o) => {
+      if (o.category === "Incubation" && Number(o.quantity) > 0) {
+        const k = monthKey(o.date);
+        if (k && (!earliestKey || k < earliestKey)) earliestKey = k;
+      }
+    }));
+    if (!earliestKey) return;
+    const missing = [];
+    let cursor = earliestKey;
+    while (cursor < currentKey) {
+      if (!existing.some((r) => r.month === cursor)) missing.push(cursor);
+      const [y, m] = cursor.split("-").map(Number);
+      cursor = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+    }
+    if (missing.length > 0) {
+      const newReports = missing.map((k) => buildMonthlyReport(data, k));
+      setData((d) => ({ ...d, hatchingReports: [...(d.hatchingReports || []), ...newReports] }));
+    }
+  }, [data?.species?.length, data?.hatchingReports?.length]);
+
   const saveNewSpecies = (sp) => {
     setData((d) => ({ ...d, species: [...d.species, sp] }));
     setCreatingSpecies(null);
@@ -9588,7 +9738,7 @@ export default function App() {
             )}
             {view.page === "terrariums" && <TerrariumsPage data={data} setData={setData} />}
             {view.page === "pricelist" && <PriceListPage data={data} onNavigate={goSpecies} />}
-            {view.page === "hatching-stats" && <HatchingStatsPage data={data} onNavigate={goSpecies} />}
+            {view.page === "hatching-stats" && <HatchingStatsPage data={data} setData={setData} onNavigate={goSpecies} />}
             {view.page === "history" && <HistoryPage data={data} setData={setData} />}
             {view.page === "tasks" && <TasksPage data={data} setData={setData} />}
             {view.page === "shopping" && <ShoppingListPage data={data} setData={setData} />}
@@ -10001,12 +10151,12 @@ input,select,textarea{ font-family:inherit; }
   .print-only-text{ display:inline; }
 
   body:not(.print-mode-elevage) .print-footer{ display:flex; align-items:center; gap:8px; margin-top:20px; padding-top:10px; border-top:1px solid #ccc; font-size:9px; color:#555; font-family:'IBM Plex Mono',monospace; }
-  .print-footer img{ width:18px; height:18px; object-fit:contain; }
+  .print-footer img{ width:26px; height:26px; object-fit:contain; }
 
   /* --- Export PDF complet --- */
   body.print-mode-full .print-sheet{ display:block; color:#111; }
   .print-sheet-header{ display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
-  .print-sheet-logo{ width:32px; height:32px; object-fit:contain; }
+  .print-sheet-logo{ width:46px; height:46px; object-fit:contain; }
   .print-sheet-titleblock{ flex:1; }
   .print-sheet-header h1{ font-size:19px; margin:0 0 2px; color:#111; }
   .print-sheet-common{ margin:0 0 4px; color:#444; font-size:11px; }
@@ -10034,12 +10184,12 @@ input,select,textarea{ font-family:inherit; }
   .elv-block p{ font-size:12px; margin:0 0 5px; color:#111; line-height:1.45; }
   .elv-block p strong{ color:#333; }
   .elv-footer{ display:flex; align-items:center; gap:6px; margin-top:16px; padding-top:9px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
-  .elv-footer img{ width:15px; height:15px; object-fit:contain; }
+  .elv-footer img{ width:22px; height:22px; object-fit:contain; }
 
   /* --- Inventaire de l'élevage --- */
   body.print-mode-inventory .inv-sheet{ display:block; color:#111; }
   .inv-header{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
-  .inv-header img{ width:28px; height:28px; object-fit:contain; }
+  .inv-header img{ width:42px; height:42px; object-fit:contain; }
   .inv-header h1{ font-size:18px; margin:0; color:#111; }
   .inv-header p{ font-size:9.5px; margin:2px 0 0; color:#555; }
   .inv-ordre-block{ break-inside:auto; margin-bottom:14px; }
@@ -10054,7 +10204,7 @@ input,select,textarea{ font-family:inherit; }
   /* --- Éclosions & œufs récoltés --- */
   body.print-mode-hatching .hatch-sheet{ display:block; color:#111; }
   .hatch-header{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
-  .hatch-header img{ width:28px; height:28px; object-fit:contain; }
+  .hatch-header img{ width:42px; height:42px; object-fit:contain; }
   .hatch-header h1{ font-size:18px; margin:0; color:#111; }
   .hatch-header p{ font-size:9.5px; margin:2px 0 0; color:#555; }
   .hatch-table{ width:100%; border-collapse:collapse; font-size:10px; }
@@ -10063,6 +10213,9 @@ input,select,textarea{ font-family:inherit; }
   .hatch-table th{ text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:0.03em; color:#444; border-bottom:1.5px solid #888; padding:5px 6px; background:#f0ede4; }
   .hatch-table td{ padding:5px 6px; border-bottom:1px solid #ddd; color:#111; }
   .hatch-total-row td{ border-top:1.5px solid #888; border-bottom:none; padding-top:7px; }
+  .hatch-section-title{ font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#8a5a22; border-bottom:1px solid #bbb; padding-bottom:3px; margin:18px 0 8px; }
+  .hatch-section-title:first-of-type{ margin-top:4px; }
+  .hatch-empty{ font-size:10px; color:#666; margin:0 0 10px; }
   .hatch-footer{ display:flex; justify-content:space-between; margin-top:14px; padding-top:8px; border-top:1px solid #ccc; font-size:8.5px; color:#666; font-family:'IBM Plex Mono',monospace; }
 }
 .inv-sheet{ display:none; }
