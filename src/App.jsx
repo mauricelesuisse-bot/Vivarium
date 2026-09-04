@@ -111,7 +111,7 @@ const PHASME_FOOD_LABELS = Object.fromEntries(PHASME_FOOD_CATEGORIES.flatMap((c)
 function feedingConfigFor(groupe) {
   if (DETRITIVORE_GROUPS.includes(groupe)) return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
   if (PREDATOR_GROUPS.includes(groupe)) return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
-  if (groupe === "phasme") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
+  if (groupe === "phasme" || groupe === "orthoptere") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
   return null;
 }
 
@@ -258,14 +258,28 @@ const GROUPS = [
   { id: "mante", label: "Mantes" },
   { id: "blatte", label: "Blattes" },
   { id: "papillon", label: "Papillons" },
-  { id: "reduve", label: "Réduves" },
+  { id: "reduve", label: "Punaises" },
   { id: "orthoptere", label: "Orthoptères" },
   { id: "araignee", label: "Araignées" },
   { id: "isopode", label: "Isopodes" },
-  { id: "iule", label: "Iules" },
+  { id: "iule", label: "Diplopodes" },
   { id: "coleoptere", label: "Coléoptères" },
   { id: "autre", label: "Autres" },
 ];
+
+// Rang taxonomique exact et taxon scientifique affichés sous chaque groupe (page "Groupes") — la plupart sont des ordres, les diplopodes forment une classe
+const GROUP_TAXO_INFO = {
+  phasme: { rank: "Ordre", taxon: "Phasmatodea" },
+  mante: { rank: "Ordre", taxon: "Mantodea" },
+  blatte: { rank: "Ordre", taxon: "Blattodea" },
+  papillon: { rank: "Ordre", taxon: "Lepidoptera" },
+  reduve: { rank: "Ordre", taxon: "Hemiptera" },
+  orthoptere: { rank: "Ordre", taxon: "Orthoptera" },
+  araignee: { rank: "Ordre", taxon: "Araneae" },
+  isopode: { rank: "Ordre", taxon: "Isopoda" },
+  iule: { rank: "Classe", taxon: "Diplopoda" },
+  coleoptere: { rank: "Ordre", taxon: "Coleoptera" },
+};
 
 const GROUP_ICONS = {
   phasme: GitBranch,
@@ -7017,6 +7031,7 @@ function PlantChip({ plant, active, photo, onSelect, onUpload, onUrl }) {
 function HubCard({ g, count, photo, onGo }) {
   const Icon = GROUP_ICONS[g.id] || Bug;
   const displayImg = photo || DEFAULT_GROUP_ICONS[g.id];
+  const taxo = GROUP_TAXO_INFO[g.id];
   return (
     <button type="button" className="hub-card" onClick={() => onGo(g.id)}>
       <div className={`hub-card-icon ${displayImg ? "hub-card-icon-img" : ""}`}>
@@ -7024,6 +7039,7 @@ function HubCard({ g, count, photo, onGo }) {
       </div>
       <div className="hub-card-main">
         <div className="hub-card-label">{g.label}</div>
+        {taxo && <div className="hub-card-taxo">{taxo.rank} : <i>{taxo.taxon}</i></div>}
         <div className="hub-card-count">{count} espèce{count > 1 ? "s" : ""}</div>
       </div>
     </button>
@@ -7091,7 +7107,7 @@ function SpeciesHub({ data, goGroup, openNewSpecies }) {
       <div className="page-head">
         <div>
           <Eyebrow>Collection</Eyebrow>
-          <h1>Espèces élevées</h1>
+          <h1>Groupes</h1>
         </div>
         <div className="detail-actions">
           <button className="btn-ghost-sm no-print" onClick={printInventory}><Printer size={14} /> Exporter l'inventaire PDF</button>
@@ -7319,11 +7335,11 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     if (!merged.taxo?.origine && merged.localite_origine) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
-    // Demande explicite : pour les blattes uniquement, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
-    if (merged.groupe === "blatte" && (!section || section === "conditions")) {
+    // Demande explicite : pour les blattes et les phasmes, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
+    if (["blatte", "phasme"].includes(merged.groupe) && (!section || section === "conditions")) {
       merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
     }
-    // Convertit automatiquement toute plante de la liste déjà mentionnée dans l'ancien texte libre vers le nouveau système sélectionnable — sans toucher au texte d'origine
+    // Convertit automatiquement toute plante de la liste déjà mentionnée dans l'ancien texte libre vers le nouveau système sélectionnable — avant d'effacer ce texte
     if (merged.groupe === "phasme" && (!section || section === "alimentation")) {
       const legacyNorm = normalizeText(`${merged.feeding?.acceptees || ""} ${merged.feeding?.preferees || ""}`);
       const existingIds = new Set((merged.feeding_structured || []).map((e) => e.item));
@@ -7333,6 +7349,8 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
       if (newEntries.length > 0) {
         merged = { ...merged, feeding_structured: [...(merged.feeding_structured || []), ...newEntries] };
       }
+      // Demande explicite : espèces déjà vérifiées et corrigées — on efface maintenant l'ancien champ alimentation (acceptés/préférés)
+      merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "" } };
     }
     return merged;
   });
@@ -7395,7 +7413,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             <p className="muted small-note">Ancien champ « Type de terrarium » encore rempli : « {sp.conditions.type_terrarium} » — reste modifiable ci-dessous, à vider toi-même une fois le choix fait ci-dessus.</p>
           )}
           <FieldGrid
-            fields={sp.groupe === "blatte" ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
+            fields={["blatte", "phasme"].includes(sp.groupe) ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
             obj={sp.conditions}
             onChange={(k, v) => setSub("conditions", k, v)}
           />
@@ -9912,6 +9930,8 @@ input,select,textarea{ font-family:inherit; }
 .hub-card-icon-img{ width:68px; height:68px; background:none; border:none; }
 .hub-card-main{ background:none; border:none; padding:0; text-align:left; display:flex; flex-direction:column; gap:4px; }
 .hub-card-label{ font-family:'Crimson Pro',serif; font-size:17px; font-weight:600; color:var(--paper); }
+.hub-card-taxo{ font-family:'Crimson Pro',serif; font-size:12.5px; color:var(--text-faint); }
+.hub-card-taxo i{ font-style:italic; }
 .hub-card-count{ font-size:12px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; }
 .spec-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); overflow:hidden; text-align:left; padding:0; display:flex; flex-direction:column; transition:border-color .15s, transform .15s; }
 .spec-card:hover{ overflow:visible; position:relative; z-index:15; }
