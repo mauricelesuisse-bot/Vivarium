@@ -274,7 +274,7 @@ const GROUPS = [
   { id: "mante", label: "Mantes" },
   { id: "blatte", label: "Blattes" },
   { id: "papillon", label: "Papillons" },
-  { id: "reduve", label: "Punaises" },
+  { id: "reduve", label: "Réduves" },
   { id: "orthoptere", label: "Orthoptères" },
   { id: "araignee", label: "Araignées" },
   { id: "isopode", label: "Isopodes" },
