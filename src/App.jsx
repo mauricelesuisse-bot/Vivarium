@@ -108,10 +108,26 @@ const PHASME_FOOD_CATEGORIES = [
 ];
 const PHASME_FOOD_LABELS = Object.fromEntries(PHASME_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
 
+// Orthoptères : même liste de plantes que les phasmes, + une catégorie fruits/légumes en plus (régime plus omnivore) — n'affecte pas les phasmes
+const ORTHOPTERE_FOOD_CATEGORIES = [
+  { category: "Plantes nourricières", items: FOOD_PLANTS },
+  { category: "Fruits & légumes", items: [
+    { id: "pomme", label: "Pomme" },
+    { id: "banane", label: "Banane" },
+    { id: "poire", label: "Poire" },
+    { id: "carotte", label: "Carotte" },
+    { id: "concombre", label: "Concombre" },
+    { id: "salade", label: "Salade" },
+  ]},
+  { category: "Autres", items: [{ id: "autre", label: "Autre" }] },
+];
+const ORTHOPTERE_FOOD_LABELS = Object.fromEntries(ORTHOPTERE_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
+
 function feedingConfigFor(groupe) {
   if (DETRITIVORE_GROUPS.includes(groupe)) return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
   if (PREDATOR_GROUPS.includes(groupe)) return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
-  if (groupe === "phasme" || groupe === "orthoptere") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
+  if (groupe === "phasme") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
+  if (groupe === "orthoptere") return { categories: ORTHOPTERE_FOOD_CATEGORIES, labels: ORTHOPTERE_FOOD_LABELS };
   return null;
 }
 
@@ -269,16 +285,24 @@ const GROUPS = [
 
 // Rang taxonomique exact et taxon scientifique affichés sous chaque groupe (page "Groupes") — la plupart sont des ordres, les diplopodes forment une classe
 const GROUP_TAXO_INFO = {
-  phasme: { rank: "Ordre", taxon: "Phasmatodea" },
-  mante: { rank: "Ordre", taxon: "Mantodea" },
-  blatte: { rank: "Ordre", taxon: "Blattodea" },
-  papillon: { rank: "Ordre", taxon: "Lepidoptera" },
-  reduve: { rank: "Ordre", taxon: "Hemiptera" },
-  orthoptere: { rank: "Ordre", taxon: "Orthoptera" },
-  araignee: { rank: "Ordre", taxon: "Araneae" },
-  isopode: { rank: "Ordre", taxon: "Isopoda" },
-  iule: { rank: "Classe", taxon: "Diplopoda" },
-  coleoptere: { rank: "Ordre", taxon: "Coleoptera" },
+  phasme: { rank: "Ordre", taxon: "Phasmatodea", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Phasmatodea"]] },
+  mante: { rank: "Ordre", taxon: "Mantodea", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Mantodea"]] },
+  blatte: { rank: "Ordre", taxon: "Blattodea", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Blattodea"]] },
+  papillon: { rank: "Ordre", taxon: "Lepidoptera", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Lepidoptera"]] },
+  reduve: { rank: "Ordre", taxon: "Hemiptera", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Hemiptera"]] },
+  orthoptere: { rank: "Ordre", taxon: "Orthoptera", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Orthoptera"]] },
+  araignee: { rank: "Ordre", taxon: "Araneae", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Arachnida"], ["Ordre", "Araneae"]] },
+  isopode: { rank: "Ordre", taxon: "Isopoda", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Malacostraca"], ["Ordre", "Isopoda"]] },
+  iule: { rank: "Classe", taxon: "Diplopoda", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Diplopoda"]] },
+  coleoptere: { rank: "Ordre", taxon: "Coleoptera", chain: [["Règne", "Animalia"], ["Embranchement", "Arthropoda"], ["Classe", "Insecta"], ["Ordre", "Coleoptera"]] },
+};
+
+// Regroupement visuel dynamique à l'intérieur d'une page de groupe — par famille (orthoptères) ou par ordre (diplopodes, autre).
+// Un nom vernaculaire n'est utilisé que s'il est fiable et non ambigu ; sinon le taxon scientifique s'affiche seul.
+const GROUP_SECTION_CONFIG = {
+  orthoptere: { rank: "famille", vernacular: { "Tettigoniidae": "Sauterelles", "Acrididae": "Criquets", "Gryllidae": "Grillons" } },
+  iule: { rank: "ordre", vernacular: {} },
+  autre: { rank: "ordre", vernacular: { "Brachyura": "Crabes" } },
 };
 
 const GROUP_ICONS = {
@@ -7141,6 +7165,8 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
   const [statusFilters, setStatusFilters] = useState({ actif: false, ancien: false, projete: false, autre: false });
 
   const groupInfo = GROUPS.find((g) => g.id === group);
+  const taxoInfo = GROUP_TAXO_INFO[group];
+  const sectionConfig = GROUP_SECTION_CONFIG[group];
   const isPredator = PREDATOR_GROUPS.includes(group);
   const isDetritivore = DETRITIVORE_GROUPS.includes(group);
   const dietOptions = isPredator ? PREY_TYPES : isDetritivore ? DETRITUS_TYPES : FOOD_PLANTS;
@@ -7178,6 +7204,14 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
         </div>
         <button className="btn-primary" onClick={openNewSpecies}><Plus size={16} /> Nouvelle espèce</button>
       </div>
+
+      {taxoInfo?.chain && (
+        <div className="taxo-preamble no-print">
+          {taxoInfo.chain.map(([rank, taxon]) => (
+            <span key={rank} className="taxo-preamble-item">{rank} : <i>{taxon}</i></span>
+          ))}
+        </div>
+      )}
 
       <div className="toolbar">
         <div className="search-box">
@@ -7240,6 +7274,42 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
           <Leaf size={26} strokeWidth={1.2} />
           <p>Aucune espèce ne correspond à ces critères.</p>
         </div>
+      ) : sectionConfig ? (
+        (() => {
+          const buckets = {};
+          const unclassified = [];
+          filtered.forEach((sp) => {
+            const taxonVal = sp.taxo?.[sectionConfig.rank];
+            if (!taxonVal) { unclassified.push(sp); return; }
+            (buckets[taxonVal] = buckets[taxonVal] || []).push(sp);
+          });
+          const sectionNames = Object.keys(buckets).sort((a, b) => a.localeCompare(b, "fr"));
+          return (
+            <>
+              {sectionNames.map((taxon) => (
+                <div className="taxo-section" key={taxon}>
+                  <h2 className="taxo-section-title">
+                    {sectionConfig.vernacular[taxon] ? `${sectionConfig.vernacular[taxon]} — ` : ""}<i>{taxon}</i>
+                  </h2>
+                  <div className="spec-grid">
+                    {buckets[taxon].map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+                  </div>
+                </div>
+              ))}
+              {unclassified.length > 0 && (
+                <div className="taxo-section taxo-section-flagged">
+                  <h2 className="taxo-section-title taxo-section-title-flagged">
+                    <AlertCircle size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+                    Classification incomplète ({sectionConfig.rank} non renseigné(e)) — à corriger sur ces fiches
+                  </h2>
+                  <div className="spec-grid">
+                    {unclassified.map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()
       ) : (
         <div className="spec-grid">
           {filtered.map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
@@ -9931,6 +10001,13 @@ input,select,textarea{ font-family:inherit; }
 .hub-card-main{ background:none; border:none; padding:0; text-align:left; display:flex; flex-direction:column; gap:4px; }
 .hub-card-label{ font-family:'Crimson Pro',serif; font-size:17px; font-weight:600; color:var(--paper); }
 .hub-card-taxo{ font-family:'Crimson Pro',serif; font-size:12.5px; color:var(--text-faint); }
+.taxo-preamble{ display:flex; flex-wrap:wrap; gap:14px; margin:2px 0 20px; padding-bottom:12px; border-bottom:1px solid var(--border-soft); }
+.taxo-preamble-item{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-faint); }
+.taxo-preamble-item i{ font-style:italic; color:var(--text-dim); }
+.taxo-section{ margin-bottom:28px; }
+.taxo-section-title{ font-family:'Crimson Pro',serif; font-size:16px; font-weight:600; color:var(--paper); margin:0 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
+.taxo-section-title i{ font-style:italic; color:var(--text-dim); font-weight:400; }
+.taxo-section-flagged .taxo-section-title-flagged{ color:var(--amber); font-size:13px; font-family:'IBM Plex Mono',monospace; font-weight:500; text-transform:none; border-color:var(--amber-deep); }
 .hub-card-taxo i{ font-style:italic; }
 .hub-card-count{ font-size:12px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; }
 .spec-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); overflow:hidden; text-align:left; padding:0; display:flex; flex-direction:column; transition:border-color .15s, transform .15s; }
