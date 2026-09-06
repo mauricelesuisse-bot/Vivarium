@@ -123,7 +123,9 @@ const ORTHOPTERE_FOOD_CATEGORIES = [
 ];
 const ORTHOPTERE_FOOD_LABELS = Object.fromEntries(ORTHOPTERE_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
 
-function feedingConfigFor(groupe) {
+function feedingConfigFor(groupe, famille) {
+  // Cas particulier : les Carabidae (carabes) sont prédateurs à l'âge adulte, contrairement aux autres coléoptères du groupe (ex. cétoines détritivores)
+  if (groupe === "coleoptere" && famille === "Carabidae") return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
   if (DETRITIVORE_GROUPS.includes(groupe)) return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
   if (PREDATOR_GROUPS.includes(groupe)) return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
   if (groupe === "phasme") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
@@ -7498,7 +7500,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
 
         {show("alimentation") && (
         <Section title="Alimentation" icon={<Leaf size={15} />} defaultOpen={section === "alimentation"}>
-          {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
+          {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
             <>
               <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} categories={cfg.categories} labels={cfg.labels} />
               <div className="field-grid">
@@ -7526,6 +7528,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
           <div className="field-grid">
             <Field label="Reproduction sexuée possible" type="select" options={OUI_NON} value={sp.repro.sexuee === true ? "oui" : sp.repro.sexuee} onChange={(v) => setSub("repro", "sexuee", v)} />
             <Field label="Parthénogenèse possible" type="select" options={OUI_NON} value={sp.repro.parthenogenetique === true ? "oui" : sp.repro.parthenogenetique} onChange={(v) => setSub("repro", "parthenogenetique", v)} />
+            <Field label="Difficulté de reproduction" type="select" options={DIFFICULTES} value={sp.repro.difficulte} onChange={(v) => setSub("repro", "difficulte", v)} />
           </div>
           <FieldGrid fields={REPRO_FIELDS} obj={sp.repro} onChange={(k, v) => setSub("repro", k, v)} />
           <Field label="Particularités reproductives" type="textarea" value={sp.repro.particularites} onChange={(v) => setSub("repro", "particularites", v)} />
@@ -7842,7 +7845,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <button className="btn-ghost-sm" onClick={() => setEditingSection("alimentation")}><Pencil size={14} /> Modifier cette section</button>
           </div>
           <div className="detail-grid">
-          {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
+          {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
             <>
               <DetritivoreFeedingDisplay items={sp.feeding_structured} labels={cfg.labels} />
               {sp.feeding?.refusees && <div className="kv kv-wide"><span className="kv-label">Aliments refusés</span><span className="kv-value">{sp.feeding.refusees}</span></div>}
@@ -7869,6 +7872,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="detail-grid">
           <div className="kv"><span className="kv-label">Reproduction sexuée</span><span className="kv-value">{sp.repro?.sexuee === "oui" || sp.repro?.sexuee === true ? "Oui" : sp.repro?.sexuee === "non" ? "Non" : "Non renseigné"}</span></div>
           <div className="kv"><span className="kv-label">Parthénogenèse</span><span className="kv-value">{sp.repro?.parthenogenetique === "oui" || sp.repro?.parthenogenetique === true ? "Oui" : sp.repro?.parthenogenetique === "non" ? "Non" : "Non renseigné"}</span></div>
+          {sp.repro?.difficulte && <div className="kv"><span className="kv-label">Difficulté de reproduction</span><span className="kv-value">{DIFFICULTES.find((d) => d.id === sp.repro.difficulte)?.label}</span></div>}
           {REPRO_FIELDS.map(([k, label]) => sp.repro?.[k] ? (
             <div className="kv" key={k}><span className="kv-label">{label}</span><span className="kv-value">{sp.repro[k]}</span></div>
           ) : null)}
@@ -8011,7 +8015,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
         <div className="print-sheet-section">
           <h2>Alimentation</h2>
           <div className="print-sheet-grid">
-            {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
+            {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
               (() => {
                 const g = detritivoreFeedingSummary(sp.feeding_structured, cfg.labels);
                 const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
@@ -8026,7 +8030,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               FEEDING_FIELDS.map(([k, label]) => sp.feeding?.[k] ? <div key={k}><strong>{label}</strong>{sp.feeding[k]}</div> : null)
             ); })()}
           </div>
-          {feedingConfigFor(sp.groupe) && sp.feeding?.remarques_alim && <p><strong>Notes : </strong>{sp.feeding.remarques_alim}</p>}
+          {feedingConfigFor(sp.groupe, sp.taxo?.famille) && sp.feeding?.remarques_alim && <p><strong>Notes : </strong>{sp.feeding.remarques_alim}</p>}
         </div>
 
         <div className="print-sheet-section">
@@ -8034,6 +8038,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="print-sheet-grid">
             <div><strong>Reproduction sexuée</strong>{sp.repro?.sexuee === "oui" || sp.repro?.sexuee === true ? "Oui" : sp.repro?.sexuee === "non" ? "Non" : "Non renseigné"}</div>
             <div><strong>Parthénogenèse</strong>{sp.repro?.parthenogenetique === "oui" || sp.repro?.parthenogenetique === true ? "Oui" : sp.repro?.parthenogenetique === "non" ? "Non" : "Non renseigné"}</div>
+            {sp.repro?.difficulte && <div><strong>Difficulté de reproduction</strong>{DIFFICULTES.find((d) => d.id === sp.repro.difficulte)?.label}</div>}
             {REPRO_FIELDS.map(([k, label]) => sp.repro?.[k] ? <div key={k}><strong>{label}</strong>{sp.repro[k]}</div> : null)}
           </div>
           {sp.repro?.particularites && <p><strong>Particularités : </strong>{sp.repro.particularites}</p>}
@@ -8116,7 +8121,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
 
             <div className="elv-block">
               <h2>Alimentation</h2>
-              {(() => { const cfg = feedingConfigFor(sp.groupe); return cfg ? (
+              {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
                 (() => {
                   const g = detritivoreFeedingSummary(sp.feeding_structured, cfg.labels);
                   const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
@@ -8150,6 +8155,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               <h2>Reproduction</h2>
               {(sp.repro?.sexuee === "oui" || sp.repro?.sexuee === true) && <p>Reproduction sexuée</p>}
               {(sp.repro?.parthenogenetique === "oui" || sp.repro?.parthenogenetique === true) && <p>Parthénogenèse possible</p>}
+              {sp.repro?.difficulte && <p><strong>Difficulté de reproduction : </strong>{DIFFICULTES.find((d) => d.id === sp.repro.difficulte)?.label}</p>}
               {sp.repro?.mode_ponte && <p><strong>Ponte : </strong>{sp.repro.mode_ponte}</p>}
               {sp.repro?.debut_ponte && <p><strong>Début de ponte : </strong>{sp.repro.debut_ponte}</p>}
               {sp.repro?.frequence_pontes && <p><strong>Fréquence : </strong>{sp.repro.frequence_pontes}</p>}
