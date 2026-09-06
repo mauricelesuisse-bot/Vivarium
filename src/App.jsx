@@ -9778,6 +9778,34 @@ export default function App() {
 
   const terrariumsOf = (sp) => (data ? data.terrariums.filter((t) => sp.terrarium_ids?.includes(t.id) || t.species_ids?.includes(sp.id)) : []);
 
+  // Remplit automatiquement Règne/Embranchement/Classe/Ordre (et le sous-ordre des phasmes) sur les fiches qui n'ont pas encore ces champs, à partir de la classification connue de chaque groupe. Ne touche jamais un champ déjà rempli, ni le groupe "Autre" (classification trop variable pour être devinée).
+  const RANK_TO_KEY = { "Règne": "regne", "Embranchement": "embranchement", "Classe": "classe", "Ordre": "ordre" };
+  useEffect(() => {
+    if (!data) return;
+    const needsFix = (sp) => {
+      const info = GROUP_TAXO_INFO[sp.groupe];
+      const chainMissing = info?.chain?.some(([rank]) => !sp.taxo?.[RANK_TO_KEY[rank]]);
+      const sousOrdreMissing = sp.groupe === "phasme" && !sp.taxo?.sous_ordre;
+      return chainMissing || sousOrdreMissing;
+    };
+    if (data.species.some(needsFix)) {
+      setData((d) => ({
+        ...d,
+        species: d.species.map((sp) => {
+          if (!needsFix(sp)) return sp;
+          const info = GROUP_TAXO_INFO[sp.groupe];
+          let taxo = { ...sp.taxo };
+          info?.chain?.forEach(([rank, taxon]) => {
+            const key = RANK_TO_KEY[rank];
+            if (!taxo[key]) taxo[key] = taxon;
+          });
+          if (sp.groupe === "phasme" && !taxo.sous_ordre) taxo.sous_ordre = "Verophasmatodea";
+          return { ...sp, taxo };
+        }),
+      }));
+    }
+  }, [data?.species?.length]);
+
   // Génère automatiquement, à l'ouverture de l'app, le rapport mensuel éclosions/incubation du (ou des) mois précédent(s) manquant(s)
   useEffect(() => {
     if (!data) return;
