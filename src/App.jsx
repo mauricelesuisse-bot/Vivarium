@@ -140,6 +140,7 @@ const DETRITIVORE_FOOD_CATEGORIES = [
     { id: "feuilles-mortes", label: "Feuilles mortes" },
     { id: "bois-decompose", label: "Bois décomposé" },
     { id: "humus", label: "Humus / matière organique" },
+    { id: "flake-soil", label: "Flake soil" },
   ]},
   { category: "Autres ressources naturelles", items: [
     { id: "champignons", label: "Champignons" },
@@ -7409,7 +7410,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
     // Demande explicite : pour les blattes et les phasmes, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
-    if (["blatte", "phasme"].includes(merged.groupe) && (!section || section === "conditions")) {
+    if (["blatte", "phasme", "coleoptere"].includes(merged.groupe) && (!section || section === "conditions")) {
       merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
     }
     // Convertit automatiquement toute plante de la liste déjà mentionnée dans l'ancien texte libre vers le nouveau système sélectionnable — avant d'effacer ce texte
@@ -7490,7 +7491,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             <p className="muted small-note">Ancien champ « Type de terrarium » encore rempli : « {sp.conditions.type_terrarium} » — reste modifiable ci-dessous, à vider toi-même une fois le choix fait ci-dessus.</p>
           )}
           <FieldGrid
-            fields={["blatte", "phasme"].includes(sp.groupe) ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
+            fields={["blatte", "phasme", "coleoptere"].includes(sp.groupe) ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
             obj={sp.conditions}
             onChange={(k, v) => setSub("conditions", k, v)}
           />
