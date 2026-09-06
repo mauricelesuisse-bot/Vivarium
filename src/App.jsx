@@ -480,7 +480,7 @@ const TASK_TYPES = [
 
 const TAXO_FIELDS = [
   ["regne", "Règne"], ["embranchement", "Embranchement"],
-  ["classe", "Classe"], ["ordre", "Ordre"],
+  ["classe", "Classe"], ["ordre", "Ordre"], ["sous_ordre", "Sous-ordre"],
   ["famille", "Famille"], ["sous_famille", "Sous-famille"], ["tribu", "Tribu"],
   ["genre", "Genre"], ["espece_epithete", "Épithète spécifique"], ["sous_espece", "Sous-espèce / localité"],
   ["auteur_annee", "Auteur & année de description"], ["synonymes", "Synonymes scientifiques"],
