@@ -7329,7 +7329,7 @@ function emptySpecies(groupe = "phasme") {
     id: uid("sp"), groupe, sci_name: "", common_name: "", statut: "actif",
     date_debut: todayISO(), date_fin: "", provenance_souche: "", localite_origine: "", generation: "",
     taille_male: "", taille_femelle: "", psg_no: "", clp_no: "", localite_culture: "", morph_cultivar: "",
-    feeding_structured: [],
+    feeding_structured: [], feeding_structured_larvae: [], feeding_structured_imago: [],
     taxo: {}, conditions: {}, feeding: {}, repro: {}, sources: [], gallery: [],
     counts: { males: 0, females: 0, juveniles: 0, nymphes_males: 0, nymphes_femelles: 0, indetermines: 0, oeufs: 0, estimation_notes: "" },
     observations: [], remarques: "", terrarium_ids: [], is_demo: false,
@@ -7425,6 +7425,10 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
       // Demande explicite : espèces déjà vérifiées et corrigées — on efface maintenant l'ancien champ alimentation (acceptés/préférés)
       merged = { ...merged, feeding: { ...merged.feeding, acceptees: "", preferees: "" } };
     }
+    // Coléoptères : sépare larves et imagos (régimes souvent très différents, ex. cétoines). Ce qui était déjà saisi est repris tel quel côté "imagos", sans rien perdre.
+    if (merged.groupe === "coleoptere" && (!merged.feeding_structured_imago || merged.feeding_structured_imago.length === 0) && merged.feeding_structured?.length > 0) {
+      merged = { ...merged, feeding_structured_imago: merged.feeding_structured };
+    }
     return merged;
   });
   const set = (k, v) => setSp((s) => ({ ...s, [k]: v }));
@@ -7502,7 +7506,16 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
         <Section title="Alimentation" icon={<Leaf size={15} />} defaultOpen={section === "alimentation"}>
           {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
             <>
-              <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} categories={cfg.categories} labels={cfg.labels} />
+              {sp.groupe === "coleoptere" ? (
+                <>
+                  <span className="field-label">Alimentation des larves</span>
+                  <DetritivoreFeedingEditor items={sp.feeding_structured_larvae || []} onChange={(v) => set("feeding_structured_larvae", v)} categories={cfg.categories} labels={cfg.labels} />
+                  <span className="field-label" style={{ marginTop: 14, display: "block" }}>Alimentation des imagos (adultes)</span>
+                  <DetritivoreFeedingEditor items={sp.feeding_structured_imago || []} onChange={(v) => set("feeding_structured_imago", v)} categories={cfg.categories} labels={cfg.labels} />
+                </>
+              ) : (
+                <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} categories={cfg.categories} labels={cfg.labels} />
+              )}
               <div className="field-grid">
                 <Field label="Aliments refusés" value={sp.feeding.refusees} onChange={(v) => setSub("feeding", "refusees", v)} />
                 <Field label="Fréquence de nourrissage" value={sp.feeding.frequence} onChange={(v) => setSub("feeding", "frequence", v)} />
@@ -7847,7 +7860,16 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="detail-grid">
           {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
             <>
-              <DetritivoreFeedingDisplay items={sp.feeding_structured} labels={cfg.labels} />
+              {sp.groupe === "coleoptere" ? (
+                <>
+                  <div className="kv kv-wide"><span className="kv-label">— Larves —</span></div>
+                  <DetritivoreFeedingDisplay items={sp.feeding_structured_larvae} labels={cfg.labels} />
+                  <div className="kv kv-wide"><span className="kv-label">— Imagos (adultes) —</span></div>
+                  <DetritivoreFeedingDisplay items={sp.feeding_structured_imago} labels={cfg.labels} />
+                </>
+              ) : (
+                <DetritivoreFeedingDisplay items={sp.feeding_structured} labels={cfg.labels} />
+              )}
               {sp.feeding?.refusees && <div className="kv kv-wide"><span className="kv-label">Aliments refusés</span><span className="kv-value">{sp.feeding.refusees}</span></div>}
               {sp.feeding?.frequence && <div className="kv kv-wide"><span className="kv-label">Fréquence de nourrissage</span><span className="kv-value">{sp.feeding.frequence}</span></div>}
               {sp.feeding?.toxiques && <div className="kv kv-wide"><span className="kv-label">Aliments potentiellement toxiques</span><span className="kv-value">{sp.feeding.toxiques}</span></div>}
@@ -8017,10 +8039,15 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="print-sheet-grid">
             {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
               (() => {
-                const g = detritivoreFeedingSummary(sp.feeding_structured, cfg.labels);
-                const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
-                  .filter(([, arr]) => arr.length > 0)
-                  .map(([label, arr]) => <div key={label}><strong>{label}</strong>{arr.join(" · ")}</div>);
+                const buildRows = (items, prefix) => {
+                  const g = detritivoreFeedingSummary(items, cfg.labels);
+                  return [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
+                    .filter(([, arr]) => arr.length > 0)
+                    .map(([label, arr]) => <div key={`${prefix}-${label}`}><strong>{prefix ? `${prefix} — ${label}` : label}</strong>{arr.join(" · ")}</div>);
+                };
+                const rows = sp.groupe === "coleoptere"
+                  ? [...buildRows(sp.feeding_structured_larvae, "Larves"), ...buildRows(sp.feeding_structured_imago, "Imagos")]
+                  : buildRows(sp.feeding_structured, "");
                 if (sp.feeding?.refusees) rows.push(<div key="refusees"><strong>Aliments refusés</strong>{sp.feeding.refusees}</div>);
                 if (sp.feeding?.frequence) rows.push(<div key="frequence"><strong>Fréquence</strong>{sp.feeding.frequence}</div>);
                 if (sp.feeding?.toxiques) rows.push(<div key="toxiques"><strong>Toxiques</strong>{sp.feeding.toxiques}</div>);
@@ -8123,10 +8150,15 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               <h2>Alimentation</h2>
               {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
                 (() => {
-                  const g = detritivoreFeedingSummary(sp.feeding_structured, cfg.labels);
-                  const rows = [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
-                    .filter(([, arr]) => arr.length > 0)
-                    .map(([label, arr]) => <p key={label}><strong>{label} : </strong>{arr.join(" · ")}</p>);
+                  const buildRows = (items, prefix) => {
+                    const g = detritivoreFeedingSummary(items, cfg.labels);
+                    return [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
+                      .filter(([, arr]) => arr.length > 0)
+                      .map(([label, arr]) => <p key={`${prefix}-${label}`}><strong>{prefix ? `${prefix} — ${label}` : label} : </strong>{arr.join(" · ")}</p>);
+                  };
+                  const rows = sp.groupe === "coleoptere"
+                    ? [...buildRows(sp.feeding_structured_larvae, "Larves"), ...buildRows(sp.feeding_structured_imago, "Imagos")]
+                    : buildRows(sp.feeding_structured, "");
                   if (sp.feeding?.refusees) rows.push(<p key="refusees"><strong>Refusés : </strong>{sp.feeding.refusees}</p>);
                   if (sp.feeding?.frequence) rows.push(<p key="frequence"><strong>Fréquence : </strong>{sp.feeding.frequence}</p>);
                   if (sp.feeding?.toxiques) rows.push(<p key="toxiques"><strong>À éviter : </strong>{sp.feeding.toxiques}</p>);
