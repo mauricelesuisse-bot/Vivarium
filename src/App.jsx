@@ -276,10 +276,10 @@ const GROUPS = [
   { id: "papillon", label: "Papillons" },
   { id: "reduve", label: "Réduves" },
   { id: "orthoptere", label: "Orthoptères" },
+  { id: "coleoptere", label: "Coléoptères" },
   { id: "araignee", label: "Araignées" },
   { id: "isopode", label: "Isopodes" },
   { id: "iule", label: "Diplopodes" },
-  { id: "coleoptere", label: "Coléoptères" },
   { id: "autre", label: "Autres" },
 ];
 
@@ -302,6 +302,7 @@ const GROUP_TAXO_INFO = {
 const GROUP_SECTION_CONFIG = {
   orthoptere: { rank: "famille", vernacular: { "Tettigoniidae": "Sauterelles", "Acrididae": "Criquets", "Gryllidae": "Grillons" } },
   iule: { rank: "ordre", vernacular: {} },
+  coleoptere: { rank: "famille", vernacular: { "Lucanidae": "Lucanes" } },
   autre: { rank: "ordre", vernacular: { "Brachyura": "Crabes" } },
 };
 
