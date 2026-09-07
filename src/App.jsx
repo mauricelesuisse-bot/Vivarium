@@ -302,8 +302,26 @@ const GROUP_TAXO_INFO = {
 
 // Regroupement visuel dynamique à l'intérieur d'une page de groupe — par famille (orthoptères) ou par ordre (diplopodes, autre).
 // Un nom vernaculaire n'est utilisé que s'il est fiable et non ambigu ; sinon le taxon scientifique s'affiche seul.
+// Orthoptères : plusieurs familles se regroupent sous une même catégorie pratique (Caelifera = criquets, Grylloidea = grillons).
+// La famille réelle de chaque espèce reste affichée sur sa carte — seule la SECTION regroupe plusieurs familles ensemble.
+const ORTHOPTERE_FAMILY_TO_GROUP = {
+  // Caelifera (criquets) — familles connues à ce jour, complétable si une nouvelle apparaît dans la collection
+  "Acrididae": "Caelifera", "Chorotypidae": "Caelifera", "Proscopiidae": "Caelifera",
+  "Pyrgomorphidae": "Caelifera", "Romaleidae": "Caelifera", "Tetrigidae": "Caelifera",
+  "Eumastacidae": "Caelifera", "Pneumoridae": "Caelifera", "Pamphagidae": "Caelifera",
+  "Lentulidae": "Caelifera", "Tanaoceridae": "Caelifera", "Ommexechidae": "Caelifera",
+  // Ensifera — Tettigoniidae (sauterelles)
+  "Tettigoniidae": "Tettigoniidae",
+  // Grylloidea (grillons)
+  "Gryllidae": "Grylloidea", "Mogoplistidae": "Grylloidea", "Trigonidiidae": "Grylloidea",
+  "Phalangopsidae": "Grylloidea", "Gryllotalpidae": "Grylloidea",
+};
+
 const GROUP_SECTION_CONFIG = {
-  orthoptere: { rank: "famille", vernacular: { "Tettigoniidae": "Sauterelles", "Acrididae": "Criquets", "Gryllidae": "Grillons" } },
+  orthoptere: {
+    getKey: (taxo) => ORTHOPTERE_FAMILY_TO_GROUP[taxo?.famille],
+    vernacular: { "Caelifera": "Criquets", "Tettigoniidae": "Sauterelles", "Grylloidea": "Grillons" },
+  },
   iule: { rank: "ordre", vernacular: {} },
   // Coléoptères : groupés par famille, sauf les Scarabaeidae (famille très hétérogène) sous-groupés par sous-famille — "Cétoines" ne désigne ainsi que les Cetoniinae, pas tout le Scarabaeidae
   coleoptere: {
@@ -7388,7 +7406,7 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
                 <div className="taxo-section taxo-section-flagged">
                   <h2 className="taxo-section-title taxo-section-title-flagged">
                     <AlertCircle size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                    Classification incomplète ({sectionConfig.rank || "famille"} non renseignée) — à corriger sur ces fiches
+                    Classification à vérifier (famille absente ou non reconnue) — à corriger sur ces fiches
                   </h2>
                   <div className="spec-grid">
                     {unclassified.map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
@@ -7494,7 +7512,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
     // Demande explicite : pour les blattes et les phasmes, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
-    if (["blatte", "phasme", "coleoptere", "araignee"].includes(merged.groupe) && (!section || section === "conditions")) {
+    if (["blatte", "phasme", "coleoptere", "araignee", "mante"].includes(merged.groupe) && (!section || section === "conditions")) {
       merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
     }
     // Convertit automatiquement toute plante de la liste déjà mentionnée dans l'ancien texte libre vers le nouveau système sélectionnable — avant d'effacer ce texte
@@ -7575,7 +7593,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             <p className="muted small-note">Ancien champ « Type de terrarium » encore rempli : « {sp.conditions.type_terrarium} » — reste modifiable ci-dessous, à vider toi-même une fois le choix fait ci-dessus.</p>
           )}
           <FieldGrid
-            fields={["blatte", "phasme", "coleoptere", "araignee"].includes(sp.groupe) ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
+            fields={["blatte", "phasme", "coleoptere", "araignee", "mante"].includes(sp.groupe) ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
             obj={sp.conditions}
             onChange={(k, v) => setSub("conditions", k, v)}
           />
