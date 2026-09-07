@@ -305,7 +305,11 @@ const GROUP_TAXO_INFO = {
 const GROUP_SECTION_CONFIG = {
   orthoptere: { rank: "famille", vernacular: { "Tettigoniidae": "Sauterelles", "Acrididae": "Criquets", "Gryllidae": "Grillons" } },
   iule: { rank: "ordre", vernacular: {} },
-  coleoptere: { rank: "famille", vernacular: { "Lucanidae": "Lucanes" } },
+  // Coléoptères : groupés par famille, sauf les Scarabaeidae (famille très hétérogène) sous-groupés par sous-famille — "Cétoines" ne désigne ainsi que les Cetoniinae, pas tout le Scarabaeidae
+  coleoptere: {
+    getKey: (taxo) => (taxo?.famille === "Scarabaeidae" ? (taxo?.sous_famille || "Scarabaeidae") : taxo?.famille),
+    vernacular: { "Lucanidae": "Lucanes", "Carabidae": "Carabes", "Cetoniinae": "Cétoines" },
+  },
   autre: { rank: "ordre", vernacular: { "Brachyura": "Crabes" } },
 };
 
@@ -391,6 +395,7 @@ const OUI_NON = [
 ];
 
 const RISK_LEVELS = [
+  { id: "aucun", label: "Aucun — aucune précaution particulière" },
   { id: "modere", label: "Modéré (piqûre/spray irritant, pas dangereux)" },
   { id: "eleve", label: "Élevé (venimeux / potentiellement dangereux)" },
 ];
@@ -6963,7 +6968,7 @@ const StatusPill = ({ statut }) => {
   return <span className={`pill pill-${statut}`}>{s.label}</span>;
 };
 
-const Field = ({ label, value, onChange, type = "text", options }) => {
+const Field = ({ label, value, onChange, type = "text", options, placeholder = "—" }) => {
   return (
     <label className="field">
       <span className="field-label">{label}</span>
@@ -6971,7 +6976,7 @@ const Field = ({ label, value, onChange, type = "text", options }) => {
         <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={3} />
       ) : type === "select" ? (
         <select value={value || ""} onChange={(e) => onChange(e.target.value)}>
-          <option value="">—</option>
+          <option value="">{placeholder}</option>
           {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
       ) : type === "checkbox" ? (
@@ -7033,7 +7038,7 @@ function ConfirmBar({ text, onConfirm, onCancel }) {
 
 function SpeciesCard({ sp, onOpen }) {
   const [zoomed, setZoomed] = useState(false);
-  const hasRisk = !!sp.conditions?.risques;
+  const hasRisk = sp.conditions?.risque_niveau === "modere" || sp.conditions?.risque_niveau === "eleve";
   const riskModere = sp.conditions?.risque_niveau === "modere";
   const photo = sp.gallery && sp.gallery.length > 0 ? (sp.gallery.find((p) => p.favorite) || sp.gallery[0]) : null;
   return (
@@ -7360,8 +7365,9 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
         (() => {
           const buckets = {};
           const unclassified = [];
+          const keyOf = sectionConfig.getKey || ((taxo) => taxo?.[sectionConfig.rank]);
           filtered.forEach((sp) => {
-            const taxonVal = sp.taxo?.[sectionConfig.rank];
+            const taxonVal = keyOf(sp.taxo);
             if (!taxonVal) { unclassified.push(sp); return; }
             (buckets[taxonVal] = buckets[taxonVal] || []).push(sp);
           });
@@ -7382,7 +7388,7 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
                 <div className="taxo-section taxo-section-flagged">
                   <h2 className="taxo-section-title taxo-section-title-flagged">
                     <AlertCircle size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
-                    Classification incomplète ({sectionConfig.rank} non renseigné(e)) — à corriger sur ces fiches
+                    Classification incomplète ({sectionConfig.rank || "famille"} non renseignée) — à corriger sur ces fiches
                   </h2>
                   <div className="spec-grid">
                     {unclassified.map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
@@ -7574,10 +7580,8 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             onChange={(k, v) => setSub("conditions", k, v)}
           />
           <Field label="Précautions particulières" type="textarea" value={sp.conditions.precautions} onChange={(v) => setSub("conditions", "precautions", v)} />
-          <Field label="Risques éventuels" type="textarea" value={sp.conditions.risques} onChange={(v) => setSub("conditions", "risques", v)} />
-          {sp.conditions.risques && (
-            <Field label="Niveau de risque" type="select" options={RISK_LEVELS} value={sp.conditions.risque_niveau} onChange={(v) => setSub("conditions", "risque_niveau", v)} />
-          )}
+          <Field label="Niveau de risque" type="select" options={RISK_LEVELS} value={sp.conditions.risque_niveau} onChange={(v) => setSub("conditions", "risque_niveau", v)} placeholder="Non renseigné" />
+          <Field label="Détail des risques (facultatif pour «Aucun»)" type="textarea" value={sp.conditions.risques} onChange={(v) => setSub("conditions", "risques", v)} />
         </Section>
         )}
 
@@ -7618,8 +7622,8 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
         {show("reproduction") && (
         <Section title="Reproduction" icon={<Egg size={15} />} defaultOpen={section === "reproduction"}>
           <div className="field-grid">
-            <Field label="Reproduction sexuée possible" type="select" options={OUI_NON} value={sp.repro.sexuee === true ? "oui" : sp.repro.sexuee} onChange={(v) => setSub("repro", "sexuee", v)} />
-            <Field label="Parthénogenèse possible" type="select" options={OUI_NON} value={sp.repro.parthenogenetique === true ? "oui" : sp.repro.parthenogenetique} onChange={(v) => setSub("repro", "parthenogenetique", v)} />
+            <Field label="Reproduction sexuée possible" type="select" options={OUI_NON} value={sp.repro.sexuee === true ? "oui" : sp.repro.sexuee} onChange={(v) => setSub("repro", "sexuee", v)} placeholder="Non renseigné" />
+            <Field label="Parthénogenèse possible" type="select" options={OUI_NON} value={sp.repro.parthenogenetique === true ? "oui" : sp.repro.parthenogenetique} onChange={(v) => setSub("repro", "parthenogenetique", v)} placeholder="Non renseigné" />
             <Field label="Difficulté de reproduction" type="select" options={DIFFICULTES} value={sp.repro.difficulte} onChange={(v) => setSub("repro", "difficulte", v)} />
           </div>
           <FieldGrid fields={REPRO_FIELDS} obj={sp.repro} onChange={(k, v) => setSub("repro", k, v)} />
@@ -7848,7 +7852,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             )}
             {sp.generation && <span className="meta-tag">Génération {sp.generation}</span>}
             {originOf(sp) && <span className="meta-tag"><MapPin size={12} /> {originOf(sp)}</span>}
-            {sp.conditions?.risques && (
+            {(sp.conditions?.risque_niveau === "modere" || sp.conditions?.risque_niveau === "eleve") && (
               <span className={`risk-tag ${sp.conditions.risque_niveau === "modere" ? "risk-tag-modere" : ""}`}>
                 {sp.conditions.risque_niveau === "modere" ? <AlertCircle size={12} /> : <Skull size={12} />}
                 {sp.conditions.risque_niveau === "modere" ? "Précaution" : "Espèce à risque"}
@@ -7901,13 +7905,19 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <button className="btn-ghost-sm" onClick={() => setEditingSection("conditions")}><Pencil size={14} /> Modifier cette section</button>
           </div>
           <div className="detail-grid">
-          {sp.conditions?.risques && (
+          {(sp.conditions?.risque_niveau === "modere" || sp.conditions?.risque_niveau === "eleve") && (
             <div className={`kv-wide risk-banner ${sp.conditions.risque_niveau === "modere" ? "risk-banner-modere" : ""}`}>
               <span className="risk-banner-label">
                 {sp.conditions.risque_niveau === "modere" ? <AlertCircle size={16} /> : <Skull size={16} />}
                 {sp.conditions.risque_niveau === "modere" ? "Précaution" : "Risques / précaution importante"}
               </span>
               <span className="risk-banner-value">{sp.conditions.risques}</span>
+            </div>
+          )}
+          {sp.conditions?.risque_niveau === "aucun" && (
+            <div className="kv-wide risk-banner risk-banner-aucun">
+              <span className="risk-banner-label"><Check size={16} /> Aucune précaution particulière</span>
+              <span className="risk-banner-value">Espèce ne nécessitant pas de précaution particulière dans les conditions normales d'élevage.</span>
             </div>
           )}
           {sp.taille_male && <div className="kv"><span className="kv-label">Taille (mâle)</span><span className="kv-value">{sp.taille_male}</span></div>}
@@ -8142,7 +8152,8 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             {CONDITIONS_FIELDS.map(([k, label]) => sp.conditions?.[k] ? <div key={k}><strong>{k === "ventilation" ? "Ventilation (ancien champ)" : k === "type_terrarium" ? "Type de terrarium (ancien champ)" : label}</strong>{sp.conditions[k]}</div> : null)}
           </div>
           {sp.conditions?.precautions && <p><strong>Précautions : </strong>{sp.conditions.precautions}</p>}
-          {sp.conditions?.risques && <p><strong>Risques : </strong>{sp.conditions.risques}</p>}
+          {(sp.conditions?.risque_niveau === "modere" || sp.conditions?.risque_niveau === "eleve") && <p><strong>Risques : </strong>{sp.conditions.risques}</p>}
+          {sp.conditions?.risque_niveau === "aucun" && <p><strong>Risques : </strong>Aucune précaution particulière.</p>}
         </div>
 
         <div className="print-sheet-section">
@@ -8261,7 +8272,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           })()}
         </div>
 
-        {sp.conditions?.risques && (
+        {(sp.conditions?.risque_niveau === "modere" || sp.conditions?.risque_niveau === "eleve") && (
           <div className="elv-warning">
             <AlertCircle size={15} /> <strong>Attention : </strong>{sp.conditions.risques}
           </div>
@@ -10314,6 +10325,9 @@ input,select,textarea{ font-family:inherit; }
 .risk-tag-modere{ background:rgba(209,154,68,0.18); border-color:var(--amber-deep); color:var(--amber); }
 .risk-banner{ display:flex; flex-direction:column; gap:6px; background:rgba(184,90,62,0.14); border:1.5px solid var(--rust); border-radius:var(--radius-sm); padding:12px 14px; }
 .risk-banner-modere{ background:rgba(209,154,68,0.14); border-color:var(--amber-deep); }
+.risk-banner-aucun{ background:rgba(140,163,126,0.12); border:1.5px solid var(--moss-deep); }
+.risk-banner-aucun .risk-banner-label{ color:var(--moss); text-transform:uppercase; letter-spacing:0.4px; }
+.risk-banner-aucun .risk-banner-value{ color:var(--text-dim); font-weight:400; font-size:12.5px; }
 .risk-banner-label{ display:flex; align-items:center; gap:7px; color:#FF8A6B; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:0.4px; }
 .risk-banner-modere .risk-banner-label{ color:var(--amber); }
 .risk-banner-value{ color:var(--text); font-weight:600; font-size:14px; line-height:1.5; }
