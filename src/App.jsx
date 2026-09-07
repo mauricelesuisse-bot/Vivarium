@@ -435,6 +435,56 @@ const CROISSANCE_EVENTS = [
   { id: "autre", label: "Autre" },
 ];
 
+// Terminologie des stades de développement, centralisée par groupe taxonomique — source unique utilisée
+// par Effectifs, Reproduction et Journal, pour qu'une même espèce garde exactement le même vocabulaire partout.
+const HOLOMETABOLE_GROUPS = ["coleoptere", "papillon"]; // œuf → larve → nymphe/chrysalide → imago
+const NO_NYMPH_GROUPS = ["araignee", "isopode"]; // juvénile → adulte, pas de nymphe ni d'imago
+
+function stageCountLabel(groupe) {
+  if (HOLOMETABOLE_GROUPS.includes(groupe)) return "Nombre de stades larvaires";
+  if (NO_NYMPH_GROUPS.includes(groupe)) return "Nombre de mues";
+  return "Nombre de stades nymphaux";
+}
+
+function croissanceEventsFor(groupe) {
+  if (HOLOMETABOLE_GROUPS.includes(groupe)) {
+    return [
+      { id: "mue", label: groupe === "papillon" ? "Mue (chenille)" : "Mue (larve)" },
+      { id: "nymphose", label: groupe === "papillon" ? "Nymphose (formation de la chrysalide)" : "Nymphose (passage au stade nymphal)" },
+      { id: "mue-imaginale", label: "Émergence (passage à l'imago)" },
+      { id: "autre", label: "Autre" },
+    ];
+  }
+  if (NO_NYMPH_GROUPS.includes(groupe)) {
+    return [
+      { id: "mue", label: "Mue" },
+      { id: "mue-imaginale", label: "Dernière mue (passage à l'état adulte)" },
+      { id: "autre", label: "Autre" },
+    ];
+  }
+  return CROISSANCE_EVENTS;
+}
+
+// Libellés des champs Effectifs, selon le groupe
+function countsLabelsFor(groupe) {
+  if (HOLOMETABOLE_GROUPS.includes(groupe)) {
+    return {
+      males: "Mâles imagos", females: "Femelles imagos",
+      stade1: groupe === "papillon" ? "Chenilles" : "Larves",
+      stade2: groupe === "papillon" ? "Chrysalides" : "Nymphes (stade pupal)",
+      indetermines: "Sexe indéterminé", oeufs: "Œufs",
+    };
+  }
+  if (NO_NYMPH_GROUPS.includes(groupe)) {
+    return { males: "Mâles adultes", females: "Femelles adultes", juveniles: "Juvéniles", indetermines: "Sexe indéterminé", oeufs: "Œufs" };
+  }
+  return {
+    males: "Mâles imagos", females: "Femelles imagos", nymphes_males: "Nymphes mâles (sexées)",
+    nymphes_femelles: "Nymphes femelles (sexées)", juveniles: "Nymphes (non sexées)",
+    indetermines: "Sexe indéterminé", oeufs: "Œufs / oothèques",
+  };
+}
+
 const REPRODUCTION_EVENTS = [
   { id: "accouplement", label: "Accouplement" },
   { id: "ponte", label: "Ponte observée" },
@@ -505,7 +555,6 @@ const REPRO_FIELDS = [
   ["mode_ponte", "Mode de ponte"], ["debut_ponte", "Début de ponte"], ["frequence_pontes", "Fréquence des pontes"],
   ["nb_oeufs_moyen", "Nombre moyen d'œufs"], ["duree_incubation", "Durée d'incubation"],
   ["temp_incubation", "Température d'incubation"], ["hygro_incubation", "Hygrométrie d'incubation"],
-  ["nb_stades", "Nombre de stades nymphaux"],
   ["duree_developpement_male", "Durée de développement (mâle)"], ["duree_developpement_femelle", "Durée de développement (femelle)"],
   ["duree_developpement", "Durée de développement"],
   ["taux_eclosion", "Taux d'éclosion observé"],
@@ -7130,6 +7179,35 @@ function InventoryPrintSheet({ data }) {
 
 function SpeciesHub({ data, goGroup, openNewSpecies }) {
   const printInventory = () => { document.body.classList.remove("print-mode-full", "print-mode-elevage"); document.body.classList.add("print-mode-inventory"); window.print(); };
+
+  // Regroupe les cartes par classe taxonomique, en conservant l'ordre actuel des groupes à l'intérieur (insectes en tête, dans leur ordre habituel)
+  const CLASS_SECTION_LABELS = {
+    Insecta: "Insectes",
+    Arachnida: "Arachnides",
+    Malacostraca: "Crustacés",
+    Diplopoda: "Diplopodes",
+  };
+  const classBuckets = {};
+  const noClass = [];
+  GROUPS.forEach((g) => {
+    const classe = GROUP_TAXO_INFO[g.id]?.chain?.find(([rank]) => rank === "Classe")?.[1];
+    if (!classe) { noClass.push(g); return; }
+    (classBuckets[classe] = classBuckets[classe] || []).push(g);
+  });
+  const classOrder = Object.keys(classBuckets).sort((a, b) => {
+    const order = ["Insecta", "Arachnida", "Malacostraca", "Diplopoda"];
+    return order.indexOf(a) - order.indexOf(b);
+  });
+
+  const renderCards = (groups) => (
+    <div className="hub-grid no-print">
+      {groups.map((g) => {
+        const count = data.species.filter((s) => s.groupe === g.id).length;
+        return <HubCard key={g.id} g={g} count={count} photo={data.groupPhotos?.[g.id]} onGo={goGroup} />;
+      })}
+    </div>
+  );
+
   return (
     <div className="page">
       <div className="page-head">
@@ -7143,20 +7221,20 @@ function SpeciesHub({ data, goGroup, openNewSpecies }) {
         </div>
       </div>
       <p className="muted no-print" style={{ marginBottom: 20 }}>Choisis un ordre pour voir uniquement les espèces qui lui appartiennent.</p>
-      <div className="hub-grid no-print">
-        {GROUPS.map((g) => {
-          const count = data.species.filter((s) => s.groupe === g.id).length;
-          return (
-            <HubCard
-              key={g.id}
-              g={g}
-              count={count}
-              photo={data.groupPhotos?.[g.id]}
-              onGo={goGroup}
-            />
-          );
-        })}
-      </div>
+
+      {classOrder.map((classe) => (
+        <div className="hub-class-section no-print" key={classe}>
+          <h2 className="hub-class-title">{CLASS_SECTION_LABELS[classe] || classe}</h2>
+          {renderCards(classBuckets[classe])}
+        </div>
+      ))}
+      {noClass.length > 0 && (
+        <div className="hub-class-section no-print">
+          <h2 className="hub-class-title">Autres</h2>
+          {renderCards(noClass)}
+        </div>
+      )}
+
       <InventoryPrintSheet data={data} />
     </div>
   );
@@ -7332,7 +7410,7 @@ function emptySpecies(groupe = "phasme") {
     taille_male: "", taille_femelle: "", psg_no: "", clp_no: "", localite_culture: "", morph_cultivar: "",
     feeding_structured: [], feeding_structured_larvae: [], feeding_structured_imago: [],
     taxo: {}, conditions: {}, feeding: {}, repro: {}, sources: [], gallery: [],
-    counts: { males: 0, females: 0, juveniles: 0, nymphes_males: 0, nymphes_femelles: 0, indetermines: 0, oeufs: 0, estimation_notes: "" },
+    counts: { males: 0, females: 0, juveniles: 0, nymphes_males: 0, nymphes_femelles: 0, larves: 0, nymphes_pupe: 0, indetermines: 0, oeufs: 0, estimation_notes: "" },
     observations: [], remarques: "", terrarium_ids: [], is_demo: false,
   };
 }
@@ -7545,6 +7623,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             <Field label="Difficulté de reproduction" type="select" options={DIFFICULTES} value={sp.repro.difficulte} onChange={(v) => setSub("repro", "difficulte", v)} />
           </div>
           <FieldGrid fields={REPRO_FIELDS} obj={sp.repro} onChange={(k, v) => setSub("repro", k, v)} />
+          <Field label={stageCountLabel(sp.groupe)} value={sp.repro.nb_stades} onChange={(v) => setSub("repro", "nb_stades", v)} />
           <Field label="Particularités reproductives" type="textarea" value={sp.repro.particularites} onChange={(v) => setSub("repro", "particularites", v)} />
         </Section>
         )}
@@ -7899,6 +7978,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           {REPRO_FIELDS.map(([k, label]) => sp.repro?.[k] ? (
             <div className="kv" key={k}><span className="kv-label">{label}</span><span className="kv-value">{sp.repro[k]}</span></div>
           ) : null)}
+          {sp.repro?.nb_stades && <div className="kv"><span className="kv-label">{stageCountLabel(sp.groupe)}</span><span className="kv-value">{sp.repro.nb_stades}</span></div>}
           {sp.repro?.particularites && <div className="kv kv-wide"><span className="kv-label">Particularités</span><span className="kv-value">{sp.repro.particularites}</span></div>}
           </div>
         </div>
@@ -7939,21 +8019,51 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
       {tab === "Effectifs" && (
         <div className="counts-panel">
           <div className="field-grid">
-            <Field label="Mâles imagos" type="number" value={sp.counts.males} onChange={(v) => setCounts("males", v)} />
-            <Field label="Femelles imagos" type="number" value={sp.counts.females} onChange={(v) => setCounts("females", v)} />
-            <Field label="Nymphes mâles (sexées)" type="number" value={sp.counts.nymphes_males} onChange={(v) => setCounts("nymphes_males", v)} />
-            <Field label="Nymphes femelles (sexées)" type="number" value={sp.counts.nymphes_femelles} onChange={(v) => setCounts("nymphes_femelles", v)} />
-            <Field label="Nymphes (non sexées)" type="number" value={sp.counts.juveniles} onChange={(v) => setCounts("juveniles", v)} />
-            <Field label="Sexe indéterminé" type="number" value={sp.counts.indetermines} onChange={(v) => setCounts("indetermines", v)} />
-            <Field label="Œufs / oothèques" type="number" value={sp.counts.oeufs} onChange={(v) => setCounts("oeufs", v)} />
+            {(() => {
+              const L = countsLabelsFor(sp.groupe);
+              if (HOLOMETABOLE_GROUPS.includes(sp.groupe)) {
+                return (
+                  <>
+                    <Field label={L.males} type="number" value={sp.counts.males} onChange={(v) => setCounts("males", v)} />
+                    <Field label={L.females} type="number" value={sp.counts.females} onChange={(v) => setCounts("females", v)} />
+                    <Field label={L.stade1} type="number" value={sp.counts.larves} onChange={(v) => setCounts("larves", v)} />
+                    <Field label={L.stade2} type="number" value={sp.counts.nymphes_pupe} onChange={(v) => setCounts("nymphes_pupe", v)} />
+                    <Field label={L.indetermines} type="number" value={sp.counts.indetermines} onChange={(v) => setCounts("indetermines", v)} />
+                    <Field label={L.oeufs} type="number" value={sp.counts.oeufs} onChange={(v) => setCounts("oeufs", v)} />
+                  </>
+                );
+              }
+              if (NO_NYMPH_GROUPS.includes(sp.groupe)) {
+                return (
+                  <>
+                    <Field label={L.males} type="number" value={sp.counts.males} onChange={(v) => setCounts("males", v)} />
+                    <Field label={L.females} type="number" value={sp.counts.females} onChange={(v) => setCounts("females", v)} />
+                    <Field label={L.juveniles} type="number" value={sp.counts.juveniles} onChange={(v) => setCounts("juveniles", v)} />
+                    <Field label={L.indetermines} type="number" value={sp.counts.indetermines} onChange={(v) => setCounts("indetermines", v)} />
+                    <Field label={L.oeufs} type="number" value={sp.counts.oeufs} onChange={(v) => setCounts("oeufs", v)} />
+                  </>
+                );
+              }
+              return (
+                <>
+                  <Field label={L.males} type="number" value={sp.counts.males} onChange={(v) => setCounts("males", v)} />
+                  <Field label={L.females} type="number" value={sp.counts.females} onChange={(v) => setCounts("females", v)} />
+                  <Field label={L.nymphes_males} type="number" value={sp.counts.nymphes_males} onChange={(v) => setCounts("nymphes_males", v)} />
+                  <Field label={L.nymphes_femelles} type="number" value={sp.counts.nymphes_femelles} onChange={(v) => setCounts("nymphes_femelles", v)} />
+                  <Field label={L.juveniles} type="number" value={sp.counts.juveniles} onChange={(v) => setCounts("juveniles", v)} />
+                  <Field label={L.indetermines} type="number" value={sp.counts.indetermines} onChange={(v) => setCounts("indetermines", v)} />
+                  <Field label={L.oeufs} type="number" value={sp.counts.oeufs} onChange={(v) => setCounts("oeufs", v)} />
+                </>
+              );
+            })()}
           </div>
           <Field label="Remarques sur l'estimation" type="textarea" value={sp.counts.estimation_notes} onChange={(v) => setCounts("estimation_notes", v)} />
-          <div className="counts-total">Total estimé : <strong>{(Number(sp.counts.males)||0)+(Number(sp.counts.females)||0)+(Number(sp.counts.juveniles)||0)+(Number(sp.counts.nymphes_males)||0)+(Number(sp.counts.nymphes_femelles)||0)+(Number(sp.counts.indetermines)||0)}</strong> individus (hors œufs)</div>
+          <div className="counts-total">Total estimé : <strong>{(Number(sp.counts.males)||0)+(Number(sp.counts.females)||0)+(Number(sp.counts.juveniles)||0)+(Number(sp.counts.nymphes_males)||0)+(Number(sp.counts.nymphes_femelles)||0)+(Number(sp.counts.larves)||0)+(Number(sp.counts.nymphes_pupe)||0)+(Number(sp.counts.indetermines)||0)}</strong> individus (hors œufs)</div>
         </div>
       )}
 
       {tab === "Journal" && (
-        <ObservationsPanel observations={sp.observations} onAdd={addObservation} onRemove={removeObservation} onUpdate={updateObservation} terrariums={terrariumsOf(sp).map((t) => ({ id: t.id, numero: t.numero, label: terrariumLabel(t, data.species, getShelves(data), getFormats(data)) }))} />
+        <ObservationsPanel observations={sp.observations} onAdd={addObservation} onRemove={removeObservation} onUpdate={updateObservation} groupe={sp.groupe} terrariums={terrariumsOf(sp).map((t) => ({ id: t.id, numero: t.numero, label: terrariumLabel(t, data.species, getShelves(data), getFormats(data)) }))} />
       )}
 
       {tab === "Tarifs" && (
@@ -8068,6 +8178,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <div><strong>Parthénogenèse</strong>{sp.repro?.parthenogenetique === "oui" || sp.repro?.parthenogenetique === true ? "Oui" : sp.repro?.parthenogenetique === "non" ? "Non" : "Non renseigné"}</div>
             {sp.repro?.difficulte && <div><strong>Difficulté de reproduction</strong>{DIFFICULTES.find((d) => d.id === sp.repro.difficulte)?.label}</div>}
             {REPRO_FIELDS.map(([k, label]) => sp.repro?.[k] ? <div key={k}><strong>{label}</strong>{sp.repro[k]}</div> : null)}
+            {sp.repro?.nb_stades && <div><strong>{stageCountLabel(sp.groupe)}</strong>{sp.repro.nb_stades}</div>}
           </div>
           {sp.repro?.particularites && <p><strong>Particularités : </strong>{sp.repro.particularites}</p>}
         </div>
@@ -8075,12 +8186,40 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
         <div className="print-sheet-section">
           <h2>Effectifs estimés</h2>
           <div className="print-sheet-grid">
-            <div><strong>Mâles imagos</strong>{sp.counts.males || 0}</div>
-            <div><strong>Femelles imagos</strong>{sp.counts.females || 0}</div>
-            <div><strong>Nymphes mâles</strong>{sp.counts.nymphes_males || 0}</div>
-            <div><strong>Nymphes femelles</strong>{sp.counts.nymphes_femelles || 0}</div>
-            <div><strong>Nymphes non sexées</strong>{sp.counts.juveniles || 0}</div>
-            <div><strong>Œufs / oothèques</strong>{sp.counts.oeufs || 0}</div>
+            {(() => {
+              const L = countsLabelsFor(sp.groupe);
+              if (HOLOMETABOLE_GROUPS.includes(sp.groupe)) {
+                return (
+                  <>
+                    <div><strong>{L.males}</strong>{sp.counts.males || 0}</div>
+                    <div><strong>{L.females}</strong>{sp.counts.females || 0}</div>
+                    <div><strong>{L.stade1}</strong>{sp.counts.larves || 0}</div>
+                    <div><strong>{L.stade2}</strong>{sp.counts.nymphes_pupe || 0}</div>
+                    <div><strong>{L.oeufs}</strong>{sp.counts.oeufs || 0}</div>
+                  </>
+                );
+              }
+              if (NO_NYMPH_GROUPS.includes(sp.groupe)) {
+                return (
+                  <>
+                    <div><strong>{L.males}</strong>{sp.counts.males || 0}</div>
+                    <div><strong>{L.females}</strong>{sp.counts.females || 0}</div>
+                    <div><strong>{L.juveniles}</strong>{sp.counts.juveniles || 0}</div>
+                    <div><strong>{L.oeufs}</strong>{sp.counts.oeufs || 0}</div>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <div><strong>{L.males}</strong>{sp.counts.males || 0}</div>
+                  <div><strong>{L.females}</strong>{sp.counts.females || 0}</div>
+                  <div><strong>{L.nymphes_males}</strong>{sp.counts.nymphes_males || 0}</div>
+                  <div><strong>{L.nymphes_femelles}</strong>{sp.counts.nymphes_femelles || 0}</div>
+                  <div><strong>{L.juveniles}</strong>{sp.counts.juveniles || 0}</div>
+                  <div><strong>{L.oeufs}</strong>{sp.counts.oeufs || 0}</div>
+                </>
+              );
+            })()}
           </div>
         </div>
 
@@ -8257,10 +8396,10 @@ function PhotoAdder({ onFile, onUrl }) {
   );
 }
 
-function ObservationsPanel({ observations, onAdd, onRemove, onUpdate, terrariums }) {
+function ObservationsPanel({ observations, onAdd, onRemove, onUpdate, terrariums, groupe }) {
   const [form, setForm] = useState({ date: todayISO(), title: "", text: "", category: OBS_CATEGORIES[0], eventType: "", eventTypes: [], quantity: "", terrarium_id: "" });
   const [editingId, setEditingId] = useState(null);
-  const eventTypes = CATEGORY_EVENT_TYPES[form.category];
+  const eventTypes = form.category === "Croissance" ? croissanceEventsFor(groupe) : CATEGORY_EVENT_TYPES[form.category];
   const isIncubation = form.category === "Incubation";
   const isMaintenance = form.category === "Maintenance";
   const blankForm = () => ({ date: todayISO(), title: "", text: "", category: OBS_CATEGORIES[0], eventType: "", eventTypes: [], quantity: "", terrarium_id: "" });
@@ -10061,6 +10200,11 @@ input,select,textarea{ font-family:inherit; }
 /* Species grid & cards */
 .spec-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
 .hub-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; }
+.hub-class-section{ margin-bottom:28px; }
+.hub-class-title{
+  font-family:'IBM Plex Mono',monospace; font-size:11.5px; text-transform:uppercase; letter-spacing:1.5px;
+  color:var(--amber); margin:0 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border-soft);
+}
 .hub-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:20px 18px; display:flex; flex-direction:column; gap:8px; transition:border-color .15s, transform .15s; text-align:left; width:100%; }
 .hub-card:hover{ border-color:var(--moss); transform:translateY(-2px); }
 .hub-card-icon{ width:44px; height:44px; border-radius:50%; background:var(--surface-alt); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--amber); overflow:hidden; padding:0; flex-shrink:0; }
