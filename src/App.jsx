@@ -7511,8 +7511,8 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
     if (!merged.taxo?.origine && merged.localite_origine) {
       merged = { ...merged, taxo: { ...merged.taxo, origine: merged.localite_origine } };
     }
-    // Demande explicite : pour les blattes et les phasmes, on efface les anciens champs texte libre Ventilation et Type de terrarium (déjà remplacés par les menus déroulants)
-    if (["blatte", "phasme", "coleoptere", "araignee", "mante"].includes(merged.groupe) && (!section || section === "conditions")) {
+    // Demande explicite : pour toutes les espèces, on efface les anciens champs texte libre Ventilation et Type de terrarium (remplacés par les menus déroulants)
+    if (!section || section === "conditions") {
       merged = { ...merged, conditions: { ...merged.conditions, ventilation: "", type_terrarium: "" } };
     }
     // Convertit automatiquement toute plante de la liste déjà mentionnée dans l'ancien texte libre vers le nouveau système sélectionnable — avant d'effacer ce texte
@@ -7580,7 +7580,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             {sp.groupe === "mante" && (
               <Field label="Cohabitation" type="select" options={COHABITATION_LEVELS} value={sp.conditions.cohabitation} onChange={(v) => setSub("conditions", "cohabitation", v)} />
             )}
-            <Field label="Ventilation (niveau)" type="select" options={VENTILATION_LEVELS} value={sp.conditions.ventilation_niveau} onChange={(v) => setSub("conditions", "ventilation_niveau", v)} />
+            <Field label="Ventilation" type="select" options={VENTILATION_LEVELS} value={sp.conditions.ventilation_niveau} onChange={(v) => setSub("conditions", "ventilation_niveau", v)} />
             <Field label="Type de terrarium (général)" type="select" options={TYPE_TERRARIUM_OPTIONS} value={sp.conditions.type_terrarium_niveau} onChange={(v) => setSub("conditions", "type_terrarium_niveau", v)} />
             {sp.conditions.type_terrarium_niveau === "autre" && (
               <Field label="Préciser le type de terrarium" value={sp.conditions.type_terrarium_precision} onChange={(v) => setSub("conditions", "type_terrarium_precision", v)} />
@@ -7593,7 +7593,7 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
             <p className="muted small-note">Ancien champ « Type de terrarium » encore rempli : « {sp.conditions.type_terrarium} » — reste modifiable ci-dessous, à vider toi-même une fois le choix fait ci-dessus.</p>
           )}
           <FieldGrid
-            fields={["blatte", "phasme", "coleoptere", "araignee", "mante"].includes(sp.groupe) ? CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium") : CONDITIONS_FIELDS}
+            fields={CONDITIONS_FIELDS.filter(([k]) => k !== "ventilation" && k !== "type_terrarium")}
             obj={sp.conditions}
             onChange={(k, v) => setSub("conditions", k, v)}
           />
@@ -7947,7 +7947,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <div className="kv"><span className="kv-label">Cohabitation</span><span className="kv-value">{COHABITATION_LEVELS.find((c) => c.id === sp.conditions.cohabitation)?.label}</span></div>
           )}
           {sp.conditions?.ventilation_niveau && (
-            <div className="kv"><span className="kv-label">Ventilation (niveau)</span><span className="kv-value">{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</span></div>
+            <div className="kv"><span className="kv-label">Ventilation</span><span className="kv-value">{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</span></div>
           )}
           {sp.conditions?.type_terrarium_niveau && (
             <div className="kv"><span className="kv-label">Type de terrarium</span><span className="kv-value">{sp.conditions.type_terrarium_niveau === "autre" ? (sp.conditions.type_terrarium_precision || "Autre") : TYPE_TERRARIUM_OPTIONS.find((t) => t.id === sp.conditions.type_terrarium_niveau)?.label}</span></div>
@@ -8165,7 +8165,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="print-sheet-grid">
             {sp.taille_male && <div><strong>Taille (mâle)</strong>{sp.taille_male}</div>}
             {sp.taille_femelle && <div><strong>Taille (femelle)</strong>{sp.taille_femelle}</div>}
-            {sp.conditions?.ventilation_niveau && <div><strong>Ventilation (niveau)</strong>{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</div>}
+            {sp.conditions?.ventilation_niveau && <div><strong>Ventilation</strong>{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</div>}
             {sp.conditions?.type_terrarium_niveau && <div><strong>Type de terrarium</strong>{sp.conditions.type_terrarium_niveau === "autre" ? (sp.conditions.type_terrarium_precision || "Autre") : TYPE_TERRARIUM_OPTIONS.find((t) => t.id === sp.conditions.type_terrarium_niveau)?.label}</div>}
             {CONDITIONS_FIELDS.map(([k, label]) => sp.conditions?.[k] ? <div key={k}><strong>{k === "ventilation" ? "Ventilation (ancien champ)" : k === "type_terrarium" ? "Type de terrarium (ancien champ)" : label}</strong>{sp.conditions[k]}</div> : null)}
           </div>
