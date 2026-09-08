@@ -384,6 +384,7 @@ const STATUTS = [
   { id: "actif", label: "Actif" },
   { id: "ancien", label: "Ancien" },
   { id: "projete", label: "Envisagé" },
+  { id: "commande", label: "Commandé" },
   { id: "autre", label: "Autre" },
 ];
 
@@ -10125,8 +10126,8 @@ button{ font-family:inherit; cursor:pointer; }
 input,select,textarea{ font-family:inherit; }
 
 .loading-screen{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; width:100%; height:100vh; color:var(--text-dim); }
-.loading-logo{ width:120px; height:120px; object-fit:contain; }
-.sidebar-logo{ width:44px; height:44px; object-fit:contain; flex-shrink:0; }
+.loading-logo{ width:120px; height:120px; object-fit:contain; background:var(--paper); border-radius:16px; padding:12px; box-shadow:0 8px 22px rgba(0,0,0,0.35); }
+.sidebar-logo{ width:44px; height:44px; object-fit:contain; background:var(--paper); border-radius:8px; padding:4px; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,0.25); }
 
 /* Sidebar */
 .sidebar{ width:230px; flex-shrink:0; background:var(--bg-soft); border-right:1px solid var(--border-soft); padding:22px 14px; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; }
@@ -10145,7 +10146,7 @@ input,select,textarea{ font-family:inherit; }
 .sidebar-signout:hover{ text-decoration:underline; }
 
 .auth-screen{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; width:100%; height:100vh; padding:24px; text-align:center; }
-.auth-logo{ width:110px; height:110px; object-fit:contain; margin-bottom:6px; }
+.auth-logo{ width:110px; height:110px; object-fit:contain; background:var(--paper); border-radius:16px; padding:11px; margin-bottom:6px; box-shadow:0 8px 22px rgba(0,0,0,0.3); }
 .auth-screen h1{ font-size:26px; color:var(--paper); }
 .auth-screen .muted{ max-width:340px; }
 .auth-form{ display:flex; flex-direction:column; gap:10px; width:100%; max-width:300px; margin-top:8px; }
@@ -10279,6 +10280,7 @@ input,select,textarea{ font-family:inherit; }
 .pill-actif{ color:var(--moss); border-color:var(--moss-deep); background:rgba(140,163,126,0.1); }
 .pill-ancien{ color:var(--amber); border-color:var(--amber-deep); background:rgba(209,154,68,0.1); }
 .pill-projete{ color:#8FAEC9; border-color:#3D5A6E; background:rgba(143,174,201,0.1); }
+.pill-commande{ color:#E0A96D; border-color:#8A5A2E; background:rgba(224,169,109,0.12); }
 .pill-autre{ color:#B79FE0; border-color:#5E4E80; background:rgba(183,159,224,0.1); }
 
 .empty-state{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:50px 20px; color:var(--text-faint); text-align:center; border:1px dashed var(--border); border-radius:var(--radius); }
@@ -10332,7 +10334,7 @@ input,select,textarea{ font-family:inherit; }
 .detail-actions{ display:flex; gap:8px; }
 .demo-banner{ display:flex; align-items:center; gap:8px; background:rgba(209,154,68,0.1); border:1px solid var(--amber-deep); color:var(--amber); padding:9px 14px; border-radius:var(--radius-sm); font-size:12.5px; margin-bottom:16px; }
 .detail-header{ margin-bottom:20px; border-bottom:1px solid var(--border-soft); padding-bottom:18px; display:flex; align-items:flex-start; gap:18px; }
-.detail-logo{ width:90px; height:90px; object-fit:contain; flex-shrink:0; }
+.detail-logo{ width:90px; height:90px; object-fit:contain; background:var(--paper); border-radius:12px; padding:9px; flex-shrink:0; box-shadow:var(--shadow); }
 .detail-header-text{ flex:1; min-width:0; }
 .detail-sci-name{ font-size:32px; color:var(--paper); }
 .detail-name-row{ display:flex; align-items:center; gap:14px; }
