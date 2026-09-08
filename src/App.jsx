@@ -584,7 +584,7 @@ const REPRO_FIELDS = [
 ];
 
 const LOGO_PHASMES_URL = "https://www.dropbox.com/scl/fi/vr65j38fvdgc0wfe908o7/Phasmes.ch.PNG?rlkey=nb52c2sizge7s2n9kedqx8huf&st=mvrtysws&raw=1"; // Logo phasmes.ch — documents/PDF liés à l'élevage
-const LOGO_APP_URL = "https://www.dropbox.com/scl/fi/66affg2ih9mwrf7xatk1w/Vivarium.PNG?rlkey=mewri143suuiktrewh73upb8v&st=rqwncian&raw=1"; // Logo Vivarium — interface de l'app
+const LOGO_APP_URL = "https://www.dropbox.com/scl/fi/h18nxgh15ikh8yf6na43q/Vivarium-Transp.PNG?rlkey=h9bz3rzp176dz2l9ag1t1345s&st=hoeguakp&raw=1"; // Logo Vivarium — interface de l'app
 
 const uid = (p = "id") => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const todayISO = () => new Date().toISOString().slice(0, 10);
