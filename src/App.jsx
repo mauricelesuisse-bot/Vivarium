@@ -8279,6 +8279,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
         <div className="elv-header">
           <img src={LOGO_PHASMES_URL} alt="" className="elv-logo" />
           <div className="elv-titleblock">
+            <p className="elv-doctitle">Fiche d'élevage</p>
             <h1><SpeciesName sp={sp} /></h1>
             {sp.common_name && <p className="elv-common">{sp.common_name}</p>}
             <div className="elv-ids">
@@ -10489,7 +10490,7 @@ input,select,textarea{ font-family:inherit; }
 
 @media print{
   .no-print{ display:none !important; }
-  .app-root{ display:block; background:white; color:#111; }
+  .app-root{ display:block; min-height:0; background:white; color:#111; }
   .sidebar{ display:none; }
   .detail-overlay{ position:static; }
   .page{ padding:0; max-width:none; }
@@ -10517,23 +10518,24 @@ input,select,textarea{ font-family:inherit; }
   .print-sheet-section p{ font-size:10px; margin:3px 0 0; color:#111; }
 
   /* --- Fiche d'élevage (synthétique, transmissible) --- */
-  @page{ size:A4; margin:12mm; }
+  @page{ size:A4; margin:10mm; }
   body.print-mode-elevage .elevage-sheet{ display:block; color:#111; }
-  .elv-header{ display:flex; align-items:flex-start; gap:14px; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:12px; }
-  .elv-logo{ width:44px; height:44px; object-fit:contain; flex-shrink:0; }
+  .elv-header{ display:flex; align-items:flex-start; gap:14px; border-bottom:2px solid #111; padding-bottom:8px; margin-bottom:10px; }
+  .elv-logo{ width:74px; height:74px; object-fit:contain; flex-shrink:0; }
   .elv-titleblock{ flex:1; }
-  .elv-header h1{ font-size:24px; margin:0 0 3px; color:#111; }
-  .elv-common{ font-size:12px; color:#444; margin:0 0 4px; font-style:italic; }
-  .elv-ids{ display:flex; gap:12px; font-size:10.5px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
+  .elv-doctitle{ font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#8a5a22; margin:0 0 2px; font-family:'IBM Plex Mono',monospace; }
+  .elv-header h1{ font-size:23px; margin:0 0 3px; color:#111; }
+  .elv-common{ font-size:11.5px; color:#444; margin:0 0 3px; font-style:italic; }
+  .elv-ids{ display:flex; gap:12px; font-size:10px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
   .elv-ids i{ font-style:italic; color:#222; }
-  .elv-photo{ width:78px; height:78px; object-fit:cover; border-radius:4px; flex-shrink:0; }
-  .elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:9px 11px; margin-bottom:14px; font-size:12px; color:#7a3a26; }
-  .elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
-  .elv-block{ break-inside:avoid; margin-bottom:14px; }
-  .elv-block h2{ font-size:13px; text-transform:uppercase; letter-spacing:0.05em; color:#8a5a22; border-bottom:1px solid #bbb; padding-bottom:3px; margin:0 0 7px; }
-  .elv-block p{ font-size:12px; margin:0 0 5px; color:#111; line-height:1.45; }
+  .elv-photo{ width:74px; height:74px; object-fit:cover; border-radius:4px; flex-shrink:0; }
+  .elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:7px 10px; margin-bottom:10px; font-size:11px; color:#7a3a26; }
+  .elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 22px; }
+  .elv-block{ break-inside:avoid; margin-bottom:9px; }
+  .elv-block h2{ font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:#8a5a22; border-bottom:1px solid #bbb; padding-bottom:2px; margin:0 0 5px; }
+  .elv-block p{ font-size:11px; margin:0 0 3px; color:#111; line-height:1.32; }
   .elv-block p strong{ color:#333; }
-  .elv-footer{ display:flex; align-items:center; gap:6px; margin-top:16px; padding-top:9px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
+  .elv-footer{ display:flex; align-items:center; gap:6px; margin-top:10px; padding-top:6px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
   .elv-footer img{ width:22px; height:22px; object-fit:contain; }
 
   /* --- Inventaire de l'élevage --- */
