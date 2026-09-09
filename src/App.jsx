@@ -8277,11 +8277,14 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
       {/* Fiche d'élevage — synthétique, 1 page A4, destinée à être transmise à un autre éleveur (aucune info privée/organisationnelle) */}
       <div className="elevage-sheet">
         <div className="elv-header">
-          <div>
+          <img src={LOGO_PHASMES_URL} alt="" className="elv-logo" />
+          <div className="elv-titleblock">
             <h1><SpeciesName sp={sp} /></h1>
             {sp.common_name && <p className="elv-common">{sp.common_name}</p>}
             <div className="elv-ids">
-              <span>{sp.taxo?.ordre}{sp.taxo?.famille ? ` · ${sp.taxo.famille}` : ""}</span>
+              {sp.taxo?.ordre && <span>Ordre : <i>{sp.taxo.ordre}</i></span>}
+              {sp.taxo?.famille && <span>Famille : <i>{sp.taxo.famille}</i></span>}
+              {sp.taxo?.sous_famille && <span>Sous-famille : <i>{sp.taxo.sous_famille}</i></span>}
               {sp.groupe === "phasme" && sp.psg_no && <span>PSG {sp.psg_no}</span>}
               {sp.groupe === "phasme" && sp.clp_no && <span>CLP {sp.clp_no}</span>}
             </div>
@@ -10369,7 +10372,6 @@ input,select,textarea{ font-family:inherit; }
 .remarks-block .tab-edit-row{ justify-content:space-between; margin-bottom:8px; }
 
 /* Fiches inactives (statut ≠ actif) : grisement discret du contenu, hors barre d'actions */
-.page-inactive .detail-logo{ filter:grayscale(1) opacity(0.55); }
 .page-inactive .detail-sci-name{ color:var(--text-dim); }
 .page-inactive .detail-header{ border-bottom-color:var(--border); opacity:0.92; }
 .page-inactive .eyebrow{ color:var(--text-faint); }
@@ -10515,12 +10517,16 @@ input,select,textarea{ font-family:inherit; }
   .print-sheet-section p{ font-size:10px; margin:3px 0 0; color:#111; }
 
   /* --- Fiche d'élevage (synthétique, transmissible) --- */
+  @page{ size:A4; margin:12mm; }
   body.print-mode-elevage .elevage-sheet{ display:block; color:#111; }
-  .elv-header{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:12px; }
-  .elv-header h1{ font-size:26px; margin:0 0 3px; color:#111; }
+  .elv-header{ display:flex; align-items:flex-start; gap:14px; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:12px; }
+  .elv-logo{ width:44px; height:44px; object-fit:contain; flex-shrink:0; }
+  .elv-titleblock{ flex:1; }
+  .elv-header h1{ font-size:24px; margin:0 0 3px; color:#111; }
   .elv-common{ font-size:12px; color:#444; margin:0 0 4px; font-style:italic; }
-  .elv-ids{ display:flex; gap:12px; font-size:11px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
-  .elv-photo{ width:85px; height:85px; object-fit:cover; border-radius:4px; flex-shrink:0; }
+  .elv-ids{ display:flex; gap:12px; font-size:10.5px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
+  .elv-ids i{ font-style:italic; color:#222; }
+  .elv-photo{ width:78px; height:78px; object-fit:cover; border-radius:4px; flex-shrink:0; }
   .elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:9px 11px; margin-bottom:14px; font-size:12px; color:#7a3a26; }
   .elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
   .elv-block{ break-inside:avoid; margin-bottom:14px; }
