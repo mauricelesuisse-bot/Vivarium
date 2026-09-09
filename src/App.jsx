@@ -123,9 +123,31 @@ const ORTHOPTERE_FOOD_CATEGORIES = [
 ];
 const ORTHOPTERE_FOOD_LABELS = Object.fromEntries(ORTHOPTERE_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
 
+// Papillons — régime adulte (nectar/fruits), bien distinct du régime larvaire (feuillage, cf. PHASME_FOOD_CATEGORIES)
+const ADULT_LEPIDOPTERA_FOOD_CATEGORIES = [
+  { category: "Alimentation adulte", items: [
+    { id: "nectar-fleurs", label: "Nectar de fleurs" },
+    { id: "fruits-murs", label: "Fruits mûrs / en décomposition" },
+    { id: "eau-sucree", label: "Eau sucrée / miel dilué" },
+    { id: "seve", label: "Sève d'arbre" },
+    { id: "ne-s-alimente-pas", label: "Ne s'alimente pas à l'état adulte" },
+  ]},
+  { category: "Autres", items: [{ id: "autre", label: "Autre" }] },
+];
+const ADULT_LEPIDOPTERA_FOOD_LABELS = Object.fromEntries(ADULT_LEPIDOPTERA_FOOD_CATEGORIES.flatMap((c) => c.items).map((i) => [i.id, i.label]));
+
 function feedingConfigFor(groupe, famille) {
   // Cas particulier : les Carabidae (carabes) sont prédateurs à l'âge adulte, contrairement aux autres coléoptères du groupe (ex. cétoines détritivores)
   if (groupe === "coleoptere" && famille === "Carabidae") return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
+  if (groupe === "coleoptere") return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
+  // Papillons : chenille (feuillage) et imago (nectar/fruits) ont des régimes totalement différents
+  if (groupe === "papillon") {
+    return {
+      categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS, // valeur par défaut (compat)
+      larvaeCategories: PHASME_FOOD_CATEGORIES, larvaeLabels: PHASME_FOOD_LABELS,
+      imagoCategories: ADULT_LEPIDOPTERA_FOOD_CATEGORIES, imagoLabels: ADULT_LEPIDOPTERA_FOOD_LABELS,
+    };
+  }
   if (DETRITIVORE_GROUPS.includes(groupe)) return { categories: DETRITIVORE_FOOD_CATEGORIES, labels: DETRITIVORE_FOOD_LABELS };
   if (PREDATOR_GROUPS.includes(groupe)) return { categories: PREY_FOOD_CATEGORIES, labels: PREY_FOOD_LABELS };
   if (groupe === "phasme") return { categories: PHASME_FOOD_CATEGORIES, labels: PHASME_FOOD_LABELS };
@@ -7609,12 +7631,12 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
         <Section title="Alimentation" icon={<Leaf size={15} />} defaultOpen={section === "alimentation"}>
           {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
             <>
-              {sp.groupe === "coleoptere" ? (
+              {HOLOMETABOLE_GROUPS.includes(sp.groupe) ? (
                 <>
                   <span className="field-label">Alimentation des larves</span>
-                  <DetritivoreFeedingEditor items={sp.feeding_structured_larvae || []} onChange={(v) => set("feeding_structured_larvae", v)} categories={cfg.categories} labels={cfg.labels} />
+                  <DetritivoreFeedingEditor items={sp.feeding_structured_larvae || []} onChange={(v) => set("feeding_structured_larvae", v)} categories={cfg.larvaeCategories || cfg.categories} labels={cfg.larvaeLabels || cfg.labels} />
                   <span className="field-label" style={{ marginTop: 14, display: "block" }}>Alimentation des imagos (adultes)</span>
-                  <DetritivoreFeedingEditor items={sp.feeding_structured_imago || []} onChange={(v) => set("feeding_structured_imago", v)} categories={cfg.categories} labels={cfg.labels} />
+                  <DetritivoreFeedingEditor items={sp.feeding_structured_imago || []} onChange={(v) => set("feeding_structured_imago", v)} categories={cfg.imagoCategories || cfg.categories} labels={cfg.imagoLabels || cfg.labels} />
                 </>
               ) : (
                 <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} categories={cfg.categories} labels={cfg.labels} />
@@ -7970,12 +7992,12 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="detail-grid">
           {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
             <>
-              {sp.groupe === "coleoptere" ? (
+              {HOLOMETABOLE_GROUPS.includes(sp.groupe) ? (
                 <>
                   <div className="kv kv-wide"><span className="kv-label">— Larves —</span></div>
-                  <DetritivoreFeedingDisplay items={sp.feeding_structured_larvae} labels={cfg.labels} />
+                  <DetritivoreFeedingDisplay items={sp.feeding_structured_larvae} labels={cfg.larvaeLabels || cfg.labels} />
                   <div className="kv kv-wide"><span className="kv-label">— Imagos (adultes) —</span></div>
-                  <DetritivoreFeedingDisplay items={sp.feeding_structured_imago} labels={cfg.labels} />
+                  <DetritivoreFeedingDisplay items={sp.feeding_structured_imago} labels={cfg.imagoLabels || cfg.labels} />
                 </>
               ) : (
                 <DetritivoreFeedingDisplay items={sp.feeding_structured} labels={cfg.labels} />
@@ -8181,14 +8203,14 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           <div className="print-sheet-grid">
             {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
               (() => {
-                const buildRows = (items, prefix) => {
-                  const g = detritivoreFeedingSummary(items, cfg.labels);
+                const buildRows = (items, prefix, labels) => {
+                  const g = detritivoreFeedingSummary(items, labels || cfg.labels);
                   return [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
                     .filter(([, arr]) => arr.length > 0)
                     .map(([label, arr]) => <div key={`${prefix}-${label}`}><strong>{prefix ? `${prefix} — ${label}` : label}</strong>{arr.join(" · ")}</div>);
                 };
-                const rows = sp.groupe === "coleoptere"
-                  ? [...buildRows(sp.feeding_structured_larvae, "Larves"), ...buildRows(sp.feeding_structured_imago, "Imagos")]
+                const rows = HOLOMETABOLE_GROUPS.includes(sp.groupe)
+                  ? [...buildRows(sp.feeding_structured_larvae, "Larves", cfg.larvaeLabels), ...buildRows(sp.feeding_structured_imago, "Imagos", cfg.imagoLabels)]
                   : buildRows(sp.feeding_structured, "");
                 if (sp.feeding?.refusees) rows.push(<div key="refusees"><strong>Aliments refusés</strong>{sp.feeding.refusees}</div>);
                 if (sp.feeding?.frequence) rows.push(<div key="frequence"><strong>Fréquence</strong>{sp.feeding.frequence}</div>);
@@ -8325,14 +8347,14 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               <h2>Alimentation</h2>
               {(() => { const cfg = feedingConfigFor(sp.groupe, sp.taxo?.famille); return cfg ? (
                 (() => {
-                  const buildRows = (items, prefix) => {
-                    const g = detritivoreFeedingSummary(items, cfg.labels);
+                  const buildRows = (items, prefix, labels) => {
+                    const g = detritivoreFeedingSummary(items, labels || cfg.labels);
                     return [["Principale", g.principal], ["Compléments", g.complement], ["Occasionnelle", g.occasionnel], ["Permanente", g.permanent]]
                       .filter(([, arr]) => arr.length > 0)
                       .map(([label, arr]) => <p key={`${prefix}-${label}`}><strong>{prefix ? `${prefix} — ${label}` : label} : </strong>{arr.join(" · ")}</p>);
                   };
-                  const rows = sp.groupe === "coleoptere"
-                    ? [...buildRows(sp.feeding_structured_larvae, "Larves"), ...buildRows(sp.feeding_structured_imago, "Imagos")]
+                  const rows = HOLOMETABOLE_GROUPS.includes(sp.groupe)
+                    ? [...buildRows(sp.feeding_structured_larvae, "Larves", cfg.larvaeLabels), ...buildRows(sp.feeding_structured_imago, "Imagos", cfg.imagoLabels)]
                     : buildRows(sp.feeding_structured, "");
                   if (sp.feeding?.refusees) rows.push(<p key="refusees"><strong>Refusés : </strong>{sp.feeding.refusees}</p>);
                   if (sp.feeding?.frequence) rows.push(<p key="frequence"><strong>Fréquence : </strong>{sp.feeding.frequence}</p>);
