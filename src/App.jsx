@@ -556,7 +556,7 @@ const TAXO_FIELDS = [
   ["regne", "Règne"], ["embranchement", "Embranchement"],
   ["classe", "Classe"], ["ordre", "Ordre"], ["sous_ordre", "Sous-ordre"],
   ["famille", "Famille"], ["sous_famille", "Sous-famille"], ["tribu", "Tribu"],
-  ["genre", "Genre"], ["espece_epithete", "Épithète spécifique"], ["sous_espece", "Sous-espèce / localité"],
+  ["genre", "Genre"], ["espece_epithete", "Épithète spécifique"], ["sous_espece", "Sous-espèce"],
   ["auteur_annee", "Auteur & année de description"], ["synonymes", "Synonymes scientifiques"],
   ["origine", "Origine géographique"], ["repartition", "Pays / régions de répartition"],
 ];
