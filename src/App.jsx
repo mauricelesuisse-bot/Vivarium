@@ -7087,6 +7087,7 @@ function SpeciesCard({ sp, onOpen }) {
     <>
     <button className="spec-card" onClick={onOpen} type="button">
       <div className="spec-card-photo">
+        {sp.fiche_verifiee && <span className="verif-badge" title="Fiche vérifiée"><Check size={11} /></span>}
         {photo ? (
           <>
             <img src={photo.url} alt="" onClick={(e) => { e.stopPropagation(); setZoomed(true); }} style={{ cursor: "zoom-in" }} />
@@ -7453,7 +7454,7 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
 
 function emptySpecies(groupe = "phasme") {
   return {
-    id: uid("sp"), groupe, sci_name: "", common_name: "", statut: "actif",
+    id: uid("sp"), groupe, sci_name: "", common_name: "", statut: "actif", fiche_verifiee: false,
     date_debut: todayISO(), date_fin: "", provenance_souche: "", localite_origine: "", generation: "",
     taille_male: "", taille_femelle: "", psg_no: "", clp_no: "", localite_culture: "", morph_cultivar: "",
     feeding_structured: [], feeding_structured_larvae: [], feeding_structured_imago: [],
@@ -7851,7 +7852,14 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             )}
           </div>
         </div>
-        <div className="detail-actions">
+        <div className="detail-actions no-print">
+          <button
+            className={`verif-toggle ${sp.fiche_verifiee ? "verif-toggle-on" : ""}`}
+            onClick={() => updateSp({ fiche_verifiee: !sp.fiche_verifiee })}
+            title={sp.fiche_verifiee ? "Fiche vérifiée — cliquer pour retirer" : "Marquer cette fiche comme vérifiée"}
+          >
+            <Check size={13} />
+          </button>
           <button className="btn-ghost-sm" onClick={printFull}><Printer size={14} /> Exporter PDF</button>
           <button className="btn-ghost-sm" onClick={printElevage}><FileText size={14} /> Fiche d'élevage PDF</button>
           <button className="btn-danger-sm" onClick={() => setConfirmDel(true)}><Trash2 size={14} /> Supprimer</button>
@@ -10283,6 +10291,15 @@ input,select,textarea{ font-family:inherit; }
 .spec-card:hover{ overflow:visible; position:relative; z-index:15; }
 .spec-card:hover{ border-color:var(--moss); transform:translateY(-2px); }
 .spec-card-photo{ height:120px; background:var(--bg-soft); position:relative; display:flex; align-items:center; justify-content:center; color:var(--text-faint); }
+.verif-badge{
+  position:absolute; top:6px; left:6px; z-index:5; width:18px; height:18px; border-radius:50%;
+  background:rgba(94,122,84,0.9); color:var(--paper); display:flex; align-items:center; justify-content:center;
+}
+.verif-toggle{
+  display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%;
+  background:transparent; border:1px solid var(--border); color:var(--text-faint); cursor:pointer; padding:0;
+}
+.verif-toggle-on{ background:var(--moss-deep); border-color:var(--moss-deep); color:var(--paper); }
 .spec-card-photo-preview{
   position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.85);
   width:260px; height:260px; object-fit:contain; background:var(--surface);
