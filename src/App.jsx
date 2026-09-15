@@ -7780,7 +7780,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
     updateSp({ observations: [{ ...obs, id: uid("obs") }, ...sp.observations] });
     const qty = Number(obs.quantity) || 0;
     if (obs.category === "Incubation" && qty > 0) {
-      if (obs.eventType === "recolte") {
+      if (obs.eventType === "recolte" || obs.eventType === "mise-incubation") {
         updateSp({ counts: { ...sp.counts, oeufs: (Number(sp.counts.oeufs) || 0) + qty } });
       } else if (obs.eventType === "naissance") {
         updateSp({ counts: { ...sp.counts, juveniles: (Number(sp.counts.juveniles) || 0) + qty } });
