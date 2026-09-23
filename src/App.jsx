@@ -205,6 +205,7 @@ const TYPE_TERRARIUM_OPTIONS = [
   { id: "flexarium", label: "Flexarium / terrarium grillagé" },
   { id: "boite-plastique", label: "Boîte plastique" },
   { id: "bac-ouvert", label: "Bac ouvert" },
+  { id: "paludarium", label: "Paludarium" },
   { id: "autre", label: "Autre" },
 ];
 
