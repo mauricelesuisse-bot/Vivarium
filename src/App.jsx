@@ -361,11 +361,11 @@ const GROUP_ICONS = {
   papillon: Feather,
   reduve: Syringe,
   orthoptere: Zap,
-  araignee: Bug,
+  araignee: Sparkles,
   isopode: Shell,
-  iule: Bug,
-  coleoptere: Bug,
-  autre: Bug,
+  iule: Menu,
+  coleoptere: Egg,
+  autre: Star,
 };
 
 
@@ -7152,7 +7152,7 @@ function HubCard({ g, count, photo, onGo }) {
   return (
     <button type="button" className="hub-card" onClick={() => onGo(g.id)}>
       <div className={`hub-card-icon ${displayImg ? "hub-card-icon-img" : ""}`}>
-        {displayImg ? <img src={displayImg} alt="" /> : <Icon size={26} strokeWidth={1.3} />}
+        {displayImg ? <img src={displayImg} alt="" /> : <Icon size={20} strokeWidth={1.8} />}
       </div>
       <div className="hub-card-main">
         <div className="hub-card-label">{g.label}</div>
@@ -10363,7 +10363,7 @@ input,select,textarea{ font-family:inherit; }
 }
 .hub-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:14px 12px; display:flex; flex-direction:column; gap:6px; transition:border-color .15s, transform .15s; text-align:left; width:100%; }
 .hub-card:hover{ border-color:var(--moss); transform:translateY(-2px); }
-.hub-card-icon{ width:36px; height:36px; border-radius:50%; background:var(--surface-alt); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--amber); overflow:hidden; padding:0; flex-shrink:0; }
+.hub-card-icon{ width:36px; height:36px; border-radius:50%; background:rgba(180,128,46,0.12); border:1px solid rgba(180,128,46,0.3); display:flex; align-items:center; justify-content:center; color:var(--amber-deep); overflow:hidden; padding:0; flex-shrink:0; }
 .hub-card-icon img{ width:100%; height:100%; object-fit:cover; }
 .hub-card-icon-img{ width:68px; height:68px; background:none; border:none; }
 .hub-card-main{ background:none; border:none; padding:0; text-align:left; display:flex; flex-direction:column; gap:4px; }
