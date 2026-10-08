@@ -7746,8 +7746,45 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
   const [confirmDel, setConfirmDel] = useState(false);
   const [jumpQuery, setJumpQuery] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [changingTerrarium, setChangingTerrarium] = useState(false);
   const fileRef = useRef(null);
   const jumpRef = useRef(null);
+
+  // Change le(s) terrarium(s) de cette espèce directement depuis sa fiche (ex. depuis le Journal) —
+  // réutilise exactement la même logique de synchronisation bidirectionnelle + log automatique au Journal
+  // que la page Terrariums, pour que le comportement reste identique où qu'on fasse le changement.
+  const setSpeciesTerrariums = (newTerrariumIds) => {
+    setData((d) => {
+      const shelves = getShelves(d);
+      const formats = getFormats(d);
+      const oldIds = sp.terrarium_ids || [];
+      const addedIds = newTerrariumIds.filter((id) => !oldIds.includes(id));
+      const removedIds = oldIds.filter((id) => !newTerrariumIds.includes(id));
+      let newObservations = sp.observations || [];
+      addedIds.forEach((tid) => {
+        const t = d.terrariums.find((x) => x.id === tid);
+        if (!t) return;
+        const code = terrariumCode(t, shelves, formats);
+        newObservations = [{ id: uid("obs"), date: todayISO(), category: "Maintenance", eventType: "changement-terrarium", terrarium_id: tid, title: "Changement de terrarium", text: `Rejoint le terrarium ${code}.` }, ...newObservations];
+      });
+      removedIds.forEach((tid) => {
+        const t = d.terrariums.find((x) => x.id === tid);
+        if (!t) return;
+        const code = terrariumCode(t, shelves, formats);
+        newObservations = [{ id: uid("obs"), date: todayISO(), category: "Maintenance", eventType: "changement-terrarium", terrarium_id: tid, title: "Changement de terrarium", text: `Quitte le terrarium ${code}.` }, ...newObservations];
+      });
+      const terrariums = d.terrariums.map((t) => {
+        const shouldHave = newTerrariumIds.includes(t.id);
+        const has = t.species_ids?.includes(sp.id);
+        if (shouldHave && !has) return { ...t, species_ids: [...(t.species_ids || []), sp.id] };
+        if (!shouldHave && has) return { ...t, species_ids: t.species_ids.filter((id) => id !== sp.id) };
+        return t;
+      });
+      const species = d.species.map((s) => (s.id === sp.id ? { ...s, terrarium_ids: newTerrariumIds, observations: newObservations } : s));
+      return { ...d, terrariums, species };
+    });
+    setChangingTerrarium(false);
+  };
 
   const sortedList = useMemo(
     () => data.species
@@ -7916,9 +7953,19 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
                 <span key={t.id} className="meta-tag"><Box size={12} /> {terrariumLabel(t, data.species, getShelves(data), getFormats(data))}</span>
               ))
             )}
+            <button className="btn-ghost-sm no-print" onClick={() => setChangingTerrarium(true)}><Pencil size={12} /> Changer de terrarium</button>
           </div>
         </div>
       </div>
+
+      {changingTerrarium && (
+        <TerrariumPickerModal
+          data={data}
+          currentIds={sp.terrarium_ids || []}
+          onSave={setSpeciesTerrariums}
+          onClose={() => setChangingTerrarium(false)}
+        />
+      )}
 
       <div className="tab-row no-print">
         {TABS.map((t) => <button key={t} className={`tab ${tab === t ? "tab-active" : ""}`} onClick={() => setTab(t)}>{t}</button>)}
@@ -8802,6 +8849,58 @@ function terrariumLabel(t, allSpecies, shelves, formats) {
   const noms = (allSpecies || []).filter((s) => t.species_ids?.includes(s.id)).map((s) => s.sci_name);
   const partie = noms.length ? noms.join(", ") : "Terrarium vide";
   return `${terrariumCode(t, shelves || [], formats || DEFAULT_TERRARIUM_FORMATS)} — ${partie}`;
+}
+
+// Petite fenêtre de sélection rapide du/des terrarium(s) d'une espèce, accessible directement depuis sa fiche
+// (ex. depuis le Journal) — sans devoir passer par l'onglet Terrariums. Même rendu/organisation (par étagère)
+// que la liste de la page Terrariums, pour rester cohérent visuellement.
+function TerrariumPickerModal({ data, currentIds, onSave, onClose }) {
+  const [selected, setSelected] = useState(currentIds);
+  const shelves = getShelves(data);
+  const formats = getFormats(data);
+  const toggle = (id) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  const bucketed = shelves.map((shelf) => ({
+    shelf,
+    terrariums: data.terrariums
+      .filter((t) => t.shelf_id === shelf.id)
+      .sort((a, b) => (a.numero_local || "").localeCompare(b.numero_local || "", "fr", { numeric: true })),
+  })).filter((b) => b.terrariums.length > 0);
+  const sansEtagere = data.terrariums.filter((t) => !t.shelf_id);
+
+  return (
+    <Modal title="Changer de terrarium" onClose={onClose}>
+      <p className="field-hint">Coche le ou les terrariums où se trouve cette espèce. Le Journal enregistre automatiquement chaque changement.</p>
+      <div className="terrarium-picker-list">
+        {bucketed.map(({ shelf, terrariums }) => (
+          <div key={shelf.id} className="terrarium-picker-group">
+            <div className="terrarium-picker-shelf">Étagère {shelf.lettre}{shelf.nom ? ` — ${shelf.nom}` : ""}</div>
+            {terrariums.map((t) => (
+              <label key={t.id} className="terrarium-picker-row">
+                <input type="checkbox" checked={selected.includes(t.id)} onChange={() => toggle(t.id)} />
+                <span>{terrariumLabel(t, data.species, shelves, formats)}</span>
+              </label>
+            ))}
+          </div>
+        ))}
+        {sansEtagere.length > 0 && (
+          <div className="terrarium-picker-group">
+            <div className="terrarium-picker-shelf">Sans étagère</div>
+            {sansEtagere.map((t) => (
+              <label key={t.id} className="terrarium-picker-row">
+                <input type="checkbox" checked={selected.includes(t.id)} onChange={() => toggle(t.id)} />
+                <span>{terrariumLabel(t, data.species, shelves, formats)}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        {data.terrariums.length === 0 && <p className="field-hint">Aucun terrarium enregistré pour l'instant.</p>}
+      </div>
+      <div className="form-actions">
+        <button className="btn-ghost" onClick={onClose}>Annuler</button>
+        <button className="btn-primary" onClick={() => onSave(selected)}><Check size={16} /> Enregistrer</button>
+      </div>
+    </Modal>
+  );
 }
 
 function emptyTerrarium() {
@@ -10342,6 +10441,11 @@ input,select,textarea{ font-family:inherit; }
 
 .form-stack{ display:flex; flex-direction:column; gap:6px; }
 .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border-soft); }
+.terrarium-picker-list{ max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; margin-top:4px; }
+.terrarium-picker-group{ display:flex; flex-direction:column; gap:4px; }
+.terrarium-picker-shelf{ font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:var(--moss-deep); margin-bottom:2px; }
+.terrarium-picker-row{ display:flex; align-items:center; gap:9px; padding:6px 8px; border-radius:7px; font-size:13px; color:var(--text); cursor:pointer; }
+.terrarium-picker-row:hover{ background:var(--surface-alt); }
 
 .section-card{ border:1px solid var(--border-soft); border-radius:var(--radius-sm); margin-bottom:10px; overflow:hidden; }
 .section-head{ width:100%; display:flex; align-items:center; justify-content:space-between; background:var(--surface-alt); border:none; padding:11px 14px; color:var(--text); }
