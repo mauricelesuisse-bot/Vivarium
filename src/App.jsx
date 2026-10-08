@@ -8863,7 +8863,7 @@ function TerrariumPickerModal({ data, currentIds, onSave, onClose }) {
     shelf,
     terrariums: data.terrariums
       .filter((t) => t.shelf_id === shelf.id)
-      .sort((a, b) => (a.numero_local || "").localeCompare(b.numero_local || "", "fr", { numeric: true })),
+      .sort((a, b) => String(a.numero_local ?? "").localeCompare(String(b.numero_local ?? ""), "fr", { numeric: true })),
   })).filter((b) => b.terrariums.length > 0);
   const sansEtagere = data.terrariums.filter((t) => !t.shelf_id);
 
