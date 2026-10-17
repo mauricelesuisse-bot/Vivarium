@@ -7470,19 +7470,18 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
       const query = q.toLowerCase();
       list = list.filter((sp) => `${sp.sci_name} ${sp.common_name} ${sp.taxo?.famille || ""} ${sp.taxo?.ordre || ""}`.toLowerCase().includes(query));
     }
-    return { title: t, matches: list };
+    return {
+      title: t,
+      matches: [...list].sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" })),
+    };
   }, [data.species, statusFilter, q]);
-
-  const buckets = {};
-  matches.forEach((sp) => { (buckets[sp.groupe] = buckets[sp.groupe] || []).push(sp); });
-  const groupOrder = GROUPS.filter((g) => buckets[g.id]?.length);
 
   return (
     <div className="page">
       <button className="btn-ghost no-print" onClick={onBack} style={{ marginBottom: 16 }}><ArrowLeft size={16} /> Tableau de bord</button>
 
       <div className="page-head">
-        <div><Eyebrow>Collection</Eyebrow><h1>{title}</h1></div>
+        <div><Eyebrow>Collection</Eyebrow><h1>{title} ({matches.length})</h1></div>
       </div>
 
       <div className="toolbar">
@@ -7495,16 +7494,9 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
       {matches.length === 0 ? (
         <div className="empty-state"><Leaf size={26} strokeWidth={1.2} /><p>Aucune espèce ne correspond à ces critères.</p></div>
       ) : (
-        groupOrder.map((g) => (
-          <div className="taxo-section" key={g.id}>
-            <h2 className="taxo-section-title">{g.label} ({buckets[g.id].length})</h2>
-            <div className="spec-grid">
-              {buckets[g.id]
-                .sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }))
-                .map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
-            </div>
-          </div>
-        ))
+        <div className="spec-grid">
+          {matches.map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+        </div>
       )}
     </div>
   );
