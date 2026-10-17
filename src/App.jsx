@@ -7457,6 +7457,59 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
   );
 }
 
+// Liste plate (tous groupes confondus) filtrée par statut — alimentée depuis les cartes-stats du tableau de bord.
+function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
+  const [q, setQ] = useState("");
+
+  const { title, matches } = useMemo(() => {
+    let list = data.species;
+    let t = "Toutes les espèces";
+    if (statusFilter === "actif") { list = list.filter((s) => s.statut === "actif"); t = "Espèces actives"; }
+    else if (statusFilter === "inactive") { list = list.filter((s) => s.statut !== "actif"); t = "Espèces anciennes"; }
+    if (q.trim()) {
+      const query = q.toLowerCase();
+      list = list.filter((sp) => `${sp.sci_name} ${sp.common_name} ${sp.taxo?.famille || ""} ${sp.taxo?.ordre || ""}`.toLowerCase().includes(query));
+    }
+    return { title: t, matches: list };
+  }, [data.species, statusFilter, q]);
+
+  const buckets = {};
+  matches.forEach((sp) => { (buckets[sp.groupe] = buckets[sp.groupe] || []).push(sp); });
+  const groupOrder = GROUPS.filter((g) => buckets[g.id]?.length);
+
+  return (
+    <div className="page">
+      <button className="btn-ghost no-print" onClick={onBack} style={{ marginBottom: 16 }}><ArrowLeft size={16} /> Tableau de bord</button>
+
+      <div className="page-head">
+        <div><Eyebrow>Collection</Eyebrow><h1>{title}</h1></div>
+      </div>
+
+      <div className="toolbar">
+        <div className="search-box">
+          <SearchIcon size={15} />
+          <input placeholder="Rechercher un nom, une famille…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+      </div>
+
+      {matches.length === 0 ? (
+        <div className="empty-state"><Leaf size={26} strokeWidth={1.2} /><p>Aucune espèce ne correspond à ces critères.</p></div>
+      ) : (
+        groupOrder.map((g) => (
+          <div className="taxo-section" key={g.id}>
+            <h2 className="taxo-section-title">{g.label} ({buckets[g.id].length})</h2>
+            <div className="spec-grid">
+              {buckets[g.id]
+                .sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }))
+                .map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 /* ============================= SPECIES FORM (add/edit core) ============================= */
 
 function emptySpecies(groupe = "phasme") {
@@ -9816,8 +9869,9 @@ function ShoppingListPage({ data, setData }) {
 
 /* ============================= DASHBOARD ============================= */
 
-function Dashboard({ data, goSpecies, goSpeciesList, goShopping }) {
+function Dashboard({ data, goSpecies, goSpeciesHub, goSpeciesStatus, goShopping, goTasks }) {
   const activeSpecies = data.species.filter((s) => s.statut === "actif");
+  const oldSpecies = data.species.filter((s) => s.statut === "ancien");
   const pendingTasks = data.tasks.filter((t) => t.status !== "done").sort((a, b) => (a.due_date > b.due_date ? 1 : -1));
   const lateTasks = pendingTasks.filter((t) => t.due_date && t.due_date < todayISO());
   const upcomingTasks = pendingTasks.filter((t) => !t.due_date || t.due_date >= todayISO()).slice(0, 5);
@@ -9831,18 +9885,22 @@ function Dashboard({ data, goSpecies, goSpeciesList, goShopping }) {
       <div className="page-head"><div><Eyebrow>Aujourd'hui, {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</Eyebrow><h1>Tableau de bord</h1></div></div>
 
       <div className="stat-row">
-        <button type="button" className="stat-card stat-card-clickable" onClick={goSpeciesList}>
+        <button type="button" className="stat-card stat-card-clickable" onClick={() => goSpeciesStatus(null)}>
           <span className="stat-num">{data.species.length}</span>
           <span className="stat-label">Espèces au total</span>
         </button>
-        <div className="stat-card">
+        <button type="button" className="stat-card stat-card-clickable" onClick={() => goSpeciesStatus("actif")}>
           <span className="stat-num">{activeSpecies.length}</span>
           <span className="stat-label">Élevages actifs</span>
-        </div>
-        <div className={`stat-card ${lateTasks.length ? "stat-card-alert" : ""}`}>
+        </button>
+        <button type="button" className="stat-card stat-card-clickable" onClick={() => goSpeciesStatus("inactive")}>
+          <span className="stat-num">{oldSpecies.length}</span>
+          <span className="stat-label">Espèces anciennes</span>
+        </button>
+        <button type="button" className={`stat-card stat-card-clickable ${lateTasks.length ? "stat-card-alert" : ""}`} onClick={goTasks}>
           <span className="stat-num">{lateTasks.length}</span>
           <span className="stat-label">Interventions en retard</span>
-        </div>
+        </button>
       </div>
 
       <div className="dash-cols">
@@ -9897,7 +9955,7 @@ function Dashboard({ data, goSpecies, goSpeciesList, goShopping }) {
           <div className="panel">
             <div className="panel-head"><Bug size={15} /> Accès rapide</div>
             <div className="quicklinks">
-              <button className="btn-ghost-sm" onClick={goSpeciesList}><Bug size={14} /> Liste des espèces</button>
+              <button className="btn-ghost-sm" onClick={goSpeciesHub}><Bug size={14} /> Liste des espèces</button>
             </div>
           </div>
         </div>
@@ -10084,6 +10142,7 @@ export default function App() {
   const goSpecies = (id) => { setView((v) => ({ ...v, id })); setSidebarOpen(false); };
   const goPage = (page) => { setView({ page }); setSidebarOpen(false); };
   const goSpeciesHub = () => { setView({ page: "species-hub" }); setSidebarOpen(false); };
+  const goSpeciesStatus = (statusFilter) => { setView({ page: "species-status", statusFilter }); setSidebarOpen(false); };
   const goSpeciesGroup = (group) => { setView({ page: "species-group", group }); setSidebarOpen(false); };
 
   const terrariumsOf = (sp) => (data ? data.terrariums.filter((t) => sp.terrarium_ids?.includes(t.id) || t.species_ids?.includes(sp.id)) : []);
@@ -10197,8 +10256,11 @@ export default function App() {
           {sidebarOpen && <div className="sidebar-scrim no-print" onClick={() => setSidebarOpen(false)} />}
 
           <main className={`main-area ${view.id ? "no-print" : ""}`}>
-            {view.page === "dashboard" && <Dashboard data={data} goSpecies={goSpecies} goSpeciesList={goSpeciesHub} goShopping={() => goPage("shopping")} />}
+            {view.page === "dashboard" && <Dashboard data={data} goSpecies={goSpecies} goSpeciesHub={goSpeciesHub} goSpeciesStatus={goSpeciesStatus} goShopping={() => goPage("shopping")} goTasks={() => goPage("tasks")} />}
             {view.page === "species-hub" && <SpeciesHub data={data} goGroup={goSpeciesGroup} openNewSpecies={() => setCreatingSpecies("")} />}
+            {view.page === "species-status" && (
+              <SpeciesStatusList data={data} statusFilter={view.statusFilter} openSpecies={goSpecies} onBack={() => setView({ page: "dashboard" })} />
+            )}
             {view.page === "species-group" && (
               <SpeciesList data={data} setData={setData} group={view.group} openSpecies={goSpecies} openNewSpecies={() => setCreatingSpecies(view.group)} onBackToHub={goSpeciesHub} />
             )}
