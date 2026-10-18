@@ -593,12 +593,12 @@ const CONDITIONS_FIELDS = [
   ["ventilation", "Ventilation"], ["dimensions_terrarium", "Dimensions du terrarium"],
   ["type_terrarium", "Type de terrarium"], ["substrat", "Substrat"], ["eclairage", "Éclairage"],
   ["esperance_vie_male", "Espérance de vie (mâle)"], ["esperance_vie_femelle", "Espérance de vie (femelle)"],
-  ["esperance_vie", "Espérance de vie"], ["comportement", "Comportement"],
+  ["esperance_vie", "Espérance de vie"], ["comportement", "Comportement", "textarea"],
 ];
 
 const FEEDING_FIELDS = [
   ["acceptees", "Plantes / proies acceptées", "textarea"], ["preferees", "Aliments préférés"],
-  ["refusees", "Aliments refusés"], ["frequence", "Fréquence de nourrissage"],
+  ["refusees", "Aliments refusés", "textarea"], ["frequence", "Fréquence de nourrissage", "textarea"],
   ["toxiques", "Plantes / aliments potentiellement toxiques", "textarea"], ["remarques_alim", "Remarques personnelles", "textarea"],
 ];
 
@@ -7017,10 +7017,10 @@ const StatusPill = ({ statut }) => {
 
 const Field = ({ label, value, onChange, type = "text", options, placeholder = "—" }) => {
   return (
-    <label className="field">
+    <label className={`field ${type === "textarea" ? "field-wide" : ""}`}>
       <span className="field-label">{label}</span>
       {type === "textarea" ? (
-        <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={3} />
+        <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={4} />
       ) : type === "select" ? (
         <select value={value || ""} onChange={(e) => onChange(e.target.value)}>
           <option value="">{placeholder}</option>
@@ -7425,7 +7425,10 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
 
 // Liste plate (tous groupes confondus) filtrée par statut — alimentée depuis les cartes-stats du tableau de bord.
 function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
+  const groupIcon = (id) => data.groupPhotos?.[id] || GROUP_ICON_IMAGES[id];
   const [q, setQ] = useState("");
+  const [collapsed, setCollapsed] = useState({});
+  const toggleSection = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
 
   const { title, matches } = useMemo(() => {
     let list = data.species;
@@ -7461,16 +7464,25 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
       {matches.length === 0 ? (
         <div className="empty-state"><Leaf size={26} strokeWidth={1.2} /><p>Aucune espèce ne correspond à ces critères.</p></div>
       ) : (
-        groupOrder.map((g) => (
-          <div className="taxo-section" key={g.id}>
-            <h2 className="taxo-section-title">{g.label} ({buckets[g.id].length})</h2>
-            <div className="spec-grid">
-              {buckets[g.id]
-                .sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }))
-                .map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+        groupOrder.map((g) => {
+          const isCollapsed = !!collapsed[g.id];
+          return (
+            <div className="taxo-section" key={g.id}>
+              <button type="button" className="taxo-section-title taxo-section-title-toggle" onClick={() => toggleSection(g.id)}>
+                {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                {groupIcon(g.id) && <img src={groupIcon(g.id)} alt="" className="taxo-section-icon" />}
+                {g.label} ({buckets[g.id].length})
+              </button>
+              {!isCollapsed && (
+                <div className="spec-grid">
+                  {buckets[g.id]
+                    .sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }))
+                    .map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+                </div>
+              )}
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
@@ -7669,8 +7681,8 @@ function SpeciesFormModal({ initial, onSave, onClose, section }) {
                 <DetritivoreFeedingEditor items={sp.feeding_structured || []} onChange={(v) => set("feeding_structured", v)} categories={cfg.categories} labels={cfg.labels} />
               )}
               <div className="field-grid">
-                <Field label="Aliments refusés" value={sp.feeding.refusees} onChange={(v) => setSub("feeding", "refusees", v)} />
-                <Field label="Fréquence de nourrissage" value={sp.feeding.frequence} onChange={(v) => setSub("feeding", "frequence", v)} />
+                <Field label="Aliments refusés" type="textarea" value={sp.feeding.refusees} onChange={(v) => setSub("feeding", "refusees", v)} />
+                <Field label="Fréquence de nourrissage" type="textarea" value={sp.feeding.frequence} onChange={(v) => setSub("feeding", "frequence", v)} />
               </div>
               <Field label="Aliments potentiellement toxiques" value={sp.feeding.toxiques} onChange={(v) => setSub("feeding", "toxiques", v)} />
               <Field label="Notes sur l'alimentation" type="textarea" value={sp.feeding.remarques_alim} onChange={(v) => setSub("feeding", "remarques_alim", v)} />
@@ -9835,7 +9847,7 @@ function ShoppingListPage({ data, setData }) {
 
 /* ============================= DASHBOARD ============================= */
 
-function Dashboard({ data, goSpecies, goSpeciesHub, goSpeciesStatus, goShopping, goTasks }) {
+function Dashboard({ data, goSpecies, goSpeciesHub, goSpeciesStatus, goShopping, goTasks, goTerrariums }) {
   const activeSpecies = data.species.filter((s) => s.statut === "actif");
   const oldSpecies = data.species.filter((s) => s.statut === "ancien");
   const pendingTasks = data.tasks.filter((t) => t.status !== "done").sort((a, b) => (a.due_date > b.due_date ? 1 : -1));
@@ -9922,6 +9934,7 @@ function Dashboard({ data, goSpecies, goSpeciesHub, goSpeciesStatus, goShopping,
             <div className="panel-head"><Bug size={15} /> Accès rapide</div>
             <div className="quicklinks">
               <button className="btn-ghost-sm" onClick={goSpeciesHub}><Bug size={14} /> Liste des espèces</button>
+              <button className="btn-ghost-sm" onClick={goTerrariums}><Box size={14} /> Terrariums</button>
             </div>
           </div>
         </div>
@@ -10222,7 +10235,7 @@ export default function App() {
           {sidebarOpen && <div className="sidebar-scrim no-print" onClick={() => setSidebarOpen(false)} />}
 
           <main className={`main-area ${view.id ? "no-print" : ""}`}>
-            {view.page === "dashboard" && <Dashboard data={data} goSpecies={goSpecies} goSpeciesHub={goSpeciesHub} goSpeciesStatus={goSpeciesStatus} goShopping={() => goPage("shopping")} goTasks={() => goPage("tasks")} />}
+            {view.page === "dashboard" && <Dashboard data={data} goSpecies={goSpecies} goSpeciesHub={goSpeciesHub} goSpeciesStatus={goSpeciesStatus} goShopping={() => goPage("shopping")} goTasks={() => goPage("tasks")} goTerrariums={() => goPage("terrariums")} />}
             {view.page === "species-hub" && <SpeciesHub data={data} goGroup={goSpeciesGroup} openNewSpecies={() => setCreatingSpecies("")} />}
             {view.page === "species-status" && (
               <SpeciesStatusList data={data} statusFilter={view.statusFilter} openSpecies={goSpecies} onBack={() => setView({ page: "dashboard" })} />
@@ -10419,6 +10432,9 @@ input,select,textarea{ font-family:inherit; }
 .taxo-section-title{ font-family:'Fraunces',serif; font-size:16px; font-weight:500; color:var(--text); margin:0 0 12px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
 .taxo-section-title i{ font-style:italic; color:var(--text-dim); font-weight:400; }
 .taxo-section-flagged .taxo-section-title-flagged{ color:var(--amber); font-size:13px; font-family:'IBM Plex Mono',monospace; font-weight:500; text-transform:none; border-color:var(--amber-deep); }
+.taxo-section-title-toggle{ background:none; border:none; border-bottom:1px solid var(--border-soft); width:100%; display:flex; align-items:center; gap:8px; cursor:pointer; text-align:left; }
+.taxo-section-title-toggle:hover{ color:var(--moss-deep); }
+.taxo-section-icon{ width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0; }
 .hub-card-taxo i{ font-style:italic; }
 .hub-card-count{ font-size:12px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; }
 .spec-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); overflow:hidden; text-align:left; padding:0; display:flex; flex-direction:column; transition:border-color .15s, transform .15s; }
@@ -10465,6 +10481,7 @@ input,select,textarea{ font-family:inherit; }
 /* Forms / fields */
 .field-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px 16px; margin-bottom:10px; }
 .field{ display:flex; flex-direction:column; gap:5px; }
+.field-grid .field-wide{ grid-column:1 / -1; }
 .field-label{ font-size:11.5px; color:var(--text-dim); font-weight:500; }
 .field input[type=text], .field input[type=date], .field input[type=number], .field select, .field textarea, .field input:not([type]){
   background:var(--bg-soft); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px; color:var(--text); font-size:13px; outline:none;
