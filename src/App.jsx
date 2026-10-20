@@ -614,6 +614,14 @@ const REPRO_FIELDS = [
 const LOGO_PHASMES_URL = "https://www.dropbox.com/scl/fi/vr65j38fvdgc0wfe908o7/Phasmes.ch.PNG?rlkey=nb52c2sizge7s2n9kedqx8huf&st=mvrtysws&raw=1"; // Logo phasmes.ch — documents/PDF liés à l'élevage
 const LOGO_APP_URL = "https://www.dropbox.com/scl/fi/h18nxgh15ikh8yf6na43q/Vivarium-Transp.PNG?rlkey=h9bz3rzp176dz2l9ag1t1345s&st=hoeguakp&raw=1"; // Logo Vivarium — interface de l'app
 
+// Fiche d'élevage PDF (transmissible à l'acquéreur) — conversion mm→px pour estimer si le contenu tient sur une page A4 avant impression
+const MM_TO_PX = 96 / 25.4;
+const ELEVAGE_PAGE_HEIGHT_MM = 277; // A4 (297mm) moins marges @page de 10mm en haut et en bas
+// Mention standard sur l'élevage responsable — formulation dédiée aux phasmes, générique pour les autres groupes d'invertébrés
+const elevageResponsableMention = (groupe) => groupe === "phasme"
+  ? "Les phasmes sont des animaux exotiques qui n'ont pas leur place dans notre écosystème. Ne relâchez jamais d'individus ni d'œufs dans la nature. En cas de surplus, privilégiez les dons ou les échanges entre éleveurs ; à défaut, la congélation permet d'éviter toute dispersion."
+  : "Ces invertébrés d'élevage ne doivent jamais être relâchés dans la nature. Gérez les surplus de manière responsable, notamment par les dons, les échanges ou une méthode d'élimination adaptée à l'espèce.";
+
 const uid = (p = "id") => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
@@ -7473,13 +7481,51 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
                 {groupIcon(g.id) && <img src={groupIcon(g.id)} alt="" className="taxo-section-icon" />}
                 {g.label} ({buckets[g.id].length})
               </button>
-              {!isCollapsed && (
-                <div className="spec-grid">
-                  {buckets[g.id]
-                    .sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }))
-                    .map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
-                </div>
-              )}
+              {!isCollapsed && (() => {
+                const sortSp = (arr) => [...arr].sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }));
+                const secCfg = GROUP_SECTION_CONFIG[g.id];
+                if (!secCfg) {
+                  return (
+                    <div className="spec-grid">
+                      {sortSp(buckets[g.id]).map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+                    </div>
+                  );
+                }
+                const keyOf = secCfg.getKey || ((taxo) => taxo?.[secCfg.rank]);
+                const subBuckets = {};
+                const unclassified = [];
+                buckets[g.id].forEach((sp) => {
+                  const taxonVal = keyOf(sp.taxo);
+                  if (!taxonVal) { unclassified.push(sp); return; }
+                  (subBuckets[taxonVal] = subBuckets[taxonVal] || []).push(sp);
+                });
+                const subNames = Object.keys(subBuckets).sort((a, b) => a.localeCompare(b, "fr"));
+                return (
+                  <>
+                    {subNames.map((taxon) => (
+                      <div className="taxo-subsection" key={taxon}>
+                        <h3 className="taxo-subsection-title">
+                          {secCfg.vernacular[taxon] ? `${secCfg.vernacular[taxon]} — ` : ""}<i>{taxon}</i>
+                        </h3>
+                        <div className="spec-grid">
+                          {sortSp(subBuckets[taxon]).map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+                        </div>
+                      </div>
+                    ))}
+                    {unclassified.length > 0 && (
+                      <div className="taxo-subsection taxo-subsection-flagged">
+                        <h3 className="taxo-subsection-title taxo-subsection-title-flagged">
+                          <AlertCircle size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+                          Classification à vérifier
+                        </h3>
+                        <div className="spec-grid">
+                          {sortSp(unclassified).map((sp) => <SpeciesCard key={sp.id} sp={sp} onOpen={() => openSpecies(sp.id)} />)}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           );
         })
@@ -7786,6 +7832,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
   const [changingTerrarium, setChangingTerrarium] = useState(false);
   const fileRef = useRef(null);
   const jumpRef = useRef(null);
+  const elevageSheetRef = useRef(null); // fiche d'élevage PDF — densité ajustée dynamiquement pour tenir sur 1 page A4 avant impression
 
   // Change le(s) terrarium(s) de cette espèce directement depuis sa fiche (ex. depuis le Journal) —
   // réutilise exactement la même logique de synchronisation bidirectionnelle + log automatique au Journal
@@ -7886,7 +7933,24 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
   };
 
   const printFull = () => { document.body.classList.remove("print-mode-elevage", "print-mode-inventory"); document.body.classList.add("print-mode-full"); window.print(); };
-  const printElevage = () => { document.body.classList.remove("print-mode-full", "print-mode-inventory"); document.body.classList.add("print-mode-elevage"); window.print(); };
+  const printElevage = () => {
+    document.body.classList.remove("print-mode-full", "print-mode-inventory");
+    // La fiche est toujours montée hors écran (voir CSS .elevage-sheet) : on mesure sa hauteur réelle et on
+    // resserre progressivement la mise en page (espacements → infos secondaires → police) jusqu'à tenir sur 1 page A4,
+    // sans jamais descendre sous une taille de police lisible.
+    const el = elevageSheetRef.current;
+    if (el) {
+      el.classList.remove("elv-d1", "elv-d2", "elv-d3", "elv-drop-secondary");
+      const budgetPx = ELEVAGE_PAGE_HEIGHT_MM * MM_TO_PX * 0.97;
+      const steps = ["elv-d1", "elv-drop-secondary", "elv-d2", "elv-d3"];
+      for (const step of steps) {
+        if (el.scrollHeight <= budgetPx) break;
+        el.classList.add(step);
+      }
+    }
+    document.body.classList.add("print-mode-elevage");
+    window.print();
+  };
 
   return (
     <div className={`page ${sp.statut !== "actif" ? "page-inactive" : ""}`}>
@@ -8390,7 +8454,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
       </div>
 
       {/* Fiche d'élevage — synthétique, 1 page A4, destinée à être transmise à un autre éleveur (aucune info privée/organisationnelle) */}
-      <div className="elevage-sheet">
+      <div className="elevage-sheet" ref={elevageSheetRef}>
         <div className="elv-header">
           <img src={LOGO_PHASMES_URL} alt="" className="elv-logo" />
           <div className="elv-titleblock">
@@ -8496,20 +8560,22 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             )}
 
             {(sp.repro?.duree_developpement_male || sp.repro?.duree_developpement_femelle || sp.repro?.duree_developpement) && (
-              <div className="elv-block">
+              <div className="elv-block elv-secondary">
                 <h2>Développement</h2>
                 <p>{[sp.repro.duree_developpement_male && `♂ ${sp.repro.duree_developpement_male}`, sp.repro.duree_developpement_femelle && `♀ ${sp.repro.duree_developpement_femelle}`].filter(Boolean).join(" · ") || sp.repro.duree_developpement}</p>
               </div>
             )}
 
             {sp.sources?.length > 0 && (
-              <div className="elv-block">
+              <div className="elv-block elv-secondary">
                 <h2>Sources</h2>
                 {sp.sources.slice(0, 4).map((src, i) => <p key={i}>{src.value}</p>)}
               </div>
             )}
           </div>
         </div>
+
+        <p className="elv-mention">{elevageResponsableMention(sp.groupe)}</p>
 
         <div className="elv-footer">
           <img src={LOGO_PHASMES_URL} alt="" /> phasmes.ch — © {new Date().getFullYear()}
@@ -10435,6 +10501,10 @@ input,select,textarea{ font-family:inherit; }
 .taxo-section-title-toggle{ background:none; border:none; border-bottom:1px solid var(--border-soft); width:100%; display:flex; align-items:center; gap:8px; cursor:pointer; text-align:left; }
 .taxo-section-title-toggle:hover{ color:var(--moss-deep); }
 .taxo-section-icon{ width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+.taxo-subsection{ margin:0 0 20px 4px; }
+.taxo-subsection-title{ font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; letter-spacing:0.02em; text-transform:uppercase; color:var(--text-dim); margin:0 0 10px; padding-bottom:5px; border-bottom:1px dotted var(--border-soft); }
+.taxo-subsection-title i{ font-style:italic; text-transform:none; }
+.taxo-subsection-flagged .taxo-subsection-title-flagged{ color:var(--amber); border-color:var(--amber-deep); }
 .hub-card-taxo i{ font-style:italic; }
 .hub-card-count{ font-size:12px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; }
 .spec-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); overflow:hidden; text-align:left; padding:0; display:flex; flex-direction:column; transition:border-color .15s, transform .15s; }
@@ -10681,7 +10751,44 @@ input,select,textarea{ font-family:inherit; }
 .print-footer{ display:none; }
 .print-only-text{ display:none; }
 .print-sheet{ display:none; }
-.elevage-sheet{ display:none; }
+/* Fiche d'élevage PDF — toujours montée hors écran (cachée par position+visibility, pas display:none) afin de pouvoir
+   mesurer sa hauteur réelle avant impression et choisir la densité qui permet de tenir sur une seule page A4. */
+.elevage-sheet{ position:fixed; top:0; left:0; width:190mm; visibility:hidden; pointer-events:none; z-index:-1; background:#fff; box-sizing:border-box; }
+.elv-header{ display:flex; align-items:flex-start; gap:14px; border-bottom:2px solid #111; padding-bottom:9px; margin-bottom:11px; }
+.elv-logo{ width:68px; height:68px; object-fit:contain; flex-shrink:0; }
+.elv-titleblock{ flex:1; min-width:0; }
+.elv-doctitle{ font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:#8a5a22; margin:0 0 3px; font-family:'IBM Plex Mono',monospace; font-weight:600; }
+.elv-header h1{ font-family:'Crimson Pro',serif; font-size:24px; margin:0 0 3px; color:#181818; letter-spacing:-0.005em; }
+.elv-common{ font-size:12px; color:#555; margin:0 0 5px; font-style:italic; }
+.elv-ids{ display:flex; gap:6px; font-size:10px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
+.elv-ids span{ background:#f3efe6; border:1px solid #ddd5c2; border-radius:3px; padding:2px 7px; }
+.elv-ids i{ font-style:italic; color:#1e1e1e; }
+.elv-photo{ width:90px; height:90px; object-fit:contain; background:#f4f1ea; border:1px solid #ddd5c2; border-radius:6px; padding:4px; flex-shrink:0; }
+.elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:7px 10px; margin-bottom:11px; font-size:11px; color:#7a3a26; }
+.elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
+.elv-block{ break-inside:avoid; margin-bottom:11px; }
+.elv-block h2{ font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em; color:#fff; background:#2C4A2E; padding:3px 8px; margin:0 0 6px; border-radius:2px; }
+.elv-block p{ font-size:11px; margin:0 0 3.5px; color:#161616; line-height:1.34; }
+.elv-block p strong{ color:#333; }
+.elv-mention{ font-size:9.5px; line-height:1.4; color:#555; background:#f6f4ec; border:1px solid #e4dfce; border-radius:4px; padding:6px 10px; margin:4px 0 10px; }
+.elv-footer{ display:flex; align-items:center; gap:6px; padding-top:6px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
+.elv-footer img{ width:22px; height:22px; object-fit:contain; }
+/* Densité adaptative — appliquée dynamiquement en JS (printElevage) pour garantir 1 seule page A4, sans jamais
+   passer sous une taille de police lisible ; les infos secondaires (elv-secondary) sont écartées avant de réduire la police. */
+.elv-d1 .elv-header{ margin-bottom:8px; padding-bottom:6px; }
+.elv-d1 .elv-block{ margin-bottom:7px; }
+.elv-d1 .elv-block p{ margin-bottom:2px; }
+.elv-d1 .elv-mention{ margin:3px 0 7px; padding:5px 9px; }
+.elv-drop-secondary .elv-secondary{ display:none; }
+.elv-d2 .elv-header h1{ font-size:21px; }
+.elv-d2 .elv-block h2{ font-size:10.5px; }
+.elv-d2 .elv-block p{ font-size:10px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.elv-d2 .elv-mention{ font-size:9px; }
+.elv-d3 .elv-header h1{ font-size:19px; }
+.elv-d3 .elv-logo, .elv-d3 .elv-photo{ width:56px; height:56px; }
+.elv-d3 .elv-block h2{ font-size:9.5px; padding:2px 6px; }
+.elv-d3 .elv-block p{ font-size:9px; -webkit-line-clamp:2; }
+.elv-d3 .elv-mention{ font-size:8.5px; padding:4px 8px; }
 
 @media print{
   .no-print{ display:none !important; }
@@ -10714,24 +10821,7 @@ input,select,textarea{ font-family:inherit; }
 
   /* --- Fiche d'élevage (synthétique, transmissible) --- */
   @page{ size:A4; margin:10mm; }
-  body.print-mode-elevage .elevage-sheet{ display:block; color:#111; }
-  .elv-header{ display:flex; align-items:flex-start; gap:14px; border-bottom:2px solid #111; padding-bottom:8px; margin-bottom:10px; }
-  .elv-logo{ width:74px; height:74px; object-fit:contain; flex-shrink:0; }
-  .elv-titleblock{ flex:1; }
-  .elv-doctitle{ font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#8a5a22; margin:0 0 2px; font-family:'IBM Plex Mono',monospace; }
-  .elv-header h1{ font-family:'Crimson Pro',serif; font-size:23px; margin:0 0 3px; color:#111; }
-  .elv-common{ font-size:11.5px; color:#444; margin:0 0 3px; font-style:italic; }
-  .elv-ids{ display:flex; gap:12px; font-size:10px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
-  .elv-ids i{ font-style:italic; color:#222; }
-  .elv-photo{ width:74px; height:74px; object-fit:cover; border-radius:4px; flex-shrink:0; }
-  .elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:7px 10px; margin-bottom:10px; font-size:11px; color:#7a3a26; }
-  .elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 22px; }
-  .elv-block{ break-inside:avoid; margin-bottom:9px; }
-  .elv-block h2{ font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:#8a5a22; border-bottom:1px solid #bbb; padding-bottom:2px; margin:0 0 5px; }
-  .elv-block p{ font-size:11px; margin:0 0 3px; color:#111; line-height:1.32; }
-  .elv-block p strong{ color:#333; }
-  .elv-footer{ display:flex; align-items:center; gap:6px; margin-top:10px; padding-top:6px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
-  .elv-footer img{ width:22px; height:22px; object-fit:contain; }
+  body.print-mode-elevage .elevage-sheet{ position:static; width:auto; visibility:visible; pointer-events:auto; z-index:auto; color:#111; }
 
   /* --- Inventaire de l'élevage --- */
   body.print-mode-inventory .inv-sheet{ display:block; color:#111; }
