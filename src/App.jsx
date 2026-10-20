@@ -8494,7 +8494,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               {sp.conditions?.eclairage && <p><strong>Éclairage : </strong>{sp.conditions.eclairage}</p>}
               {sp.conditions?.substrat && <p><strong>Substrat : </strong>{sp.conditions.substrat}</p>}
               {sp.conditions?.type_terrarium && <p><strong>Terrarium conseillé : </strong>{sp.conditions.type_terrarium}</p>}
-              {sp.conditions?.dimensions_terrarium && <p><strong>Dimensions min. : </strong>{sp.conditions.dimensions_terrarium}</p>}
+              {sp.conditions?.dimensions_terrarium && <p><strong>Terrarium : </strong>{sp.conditions.dimensions_terrarium}</p>}
               {(sp.taille_male || sp.taille_femelle) && (
                 <p><strong>Taille : </strong>{[sp.taille_male && `♂ ${sp.taille_male}`, sp.taille_femelle && `♀ ${sp.taille_femelle}`].filter(Boolean).join(" · ")}</p>
               )}
