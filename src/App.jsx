@@ -8468,6 +8468,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               {sp.groupe === "phasme" && sp.psg_no && <span>PSG {sp.psg_no}</span>}
               {sp.groupe === "phasme" && sp.clp_no && <span>CLP {sp.clp_no}</span>}
             </div>
+            {originOf(sp) && <p className="elv-origin"><strong>Origine géographique : </strong>{originOf(sp)}</p>}
           </div>
           {(() => {
             const favPhoto = sp.gallery.find((p) => p.favorite) || sp.gallery[0];
@@ -10766,6 +10767,8 @@ input,select,textarea{ font-family:inherit; }
 .elv-ids{ display:flex; gap:6px; font-size:10px; color:#444; font-family:'IBM Plex Mono',monospace; flex-wrap:wrap; }
 .elv-ids span{ background:#f3efe6; border:1px solid #ddd5c2; border-radius:3px; padding:2px 7px; }
 .elv-ids i{ font-style:italic; color:#1e1e1e; }
+.elv-origin{ font-size:10.5px; color:#444; margin:5px 0 0; }
+.elv-origin strong{ color:#333; }
 .elv-photo{ width:90px; height:90px; object-fit:contain; background:#f4f1ea; border:1px solid #ddd5c2; border-radius:6px; padding:4px; flex-shrink:0; }
 .elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:7px 10px; margin-bottom:11px; font-size:11px; color:#7a3a26; }
 .elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
@@ -10773,7 +10776,7 @@ input,select,textarea{ font-family:inherit; }
 .elv-block h2{ font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#2C4A2E; border-bottom:1.5px solid #2C4A2E; padding:0 0 3px; margin:0 0 7px; }
 .elv-block p{ font-size:11px; margin:0 0 3.5px; color:#161616; line-height:1.34; }
 .elv-block p strong{ color:#333; }
-.elv-mention{ font-size:11px; font-weight:500; line-height:1.42; color:#4a4030; background:#f6f4ec; border:1px solid #e4dfce; border-radius:4px; padding:7px 11px; margin:4px 0 10px; }
+.elv-mention{ font-size:11px; font-weight:500; line-height:1.42; color:#405A43; background:#F7F8F2; border:1px solid #C8D2BD; border-radius:4px; padding:7px 11px; margin:4px 0 10px; }
 .elv-footer{ display:flex; align-items:center; gap:6px; padding-top:6px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
 .elv-footer img{ width:22px; height:22px; object-fit:contain; }
 /* Densité adaptative — appliquée dynamiquement en JS (printElevage) pour garantir 1 seule page A4, sans jamais
@@ -10784,6 +10787,8 @@ input,select,textarea{ font-family:inherit; }
 .elv-d1 .elv-mention{ margin:3px 0 7px; padding:5px 9px; }
 .elv-drop-secondary .elv-secondary{ display:none; }
 .elv-d2 .elv-header h1{ font-size:21px; }
+.elv-d2 .elv-origin{ font-size:10px; }
+.elv-d3 .elv-origin{ font-size:9.5px; margin-top:3px; }
 .elv-d2 .elv-block h2{ font-size:11px; }
 .elv-d2 .elv-block p{ font-size:10px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .elv-d2 .elv-mention{ font-size:10px; padding:6px 10px; }
