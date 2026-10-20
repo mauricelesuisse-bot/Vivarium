@@ -7435,8 +7435,9 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
 function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
   const groupIcon = (id) => data.groupPhotos?.[id] || GROUP_ICON_IMAGES[id];
   const [q, setQ] = useState("");
-  const [collapsed, setCollapsed] = useState({});
-  const toggleSection = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+  // Sections repliées par défaut : on voit d'un coup d'œil les ordres et leurs effectifs, puis on déplie celui qui intéresse
+  const [expanded, setExpanded] = useState({});
+  const toggleSection = (id) => setExpanded((c) => ({ ...c, [id]: !c[id] }));
 
   const { title, matches } = useMemo(() => {
     let list = data.species;
@@ -7460,6 +7461,11 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
 
       <div className="page-head">
         <div><Eyebrow>Collection</Eyebrow><h1>{title} ({matches.length})</h1></div>
+        {matches.length > 0 && !q.trim() && (
+          <button className="btn-ghost-sm" onClick={() => setExpanded(groupOrder.every((g) => expanded[g.id]) ? {} : Object.fromEntries(groupOrder.map((g) => [g.id, true])))}>
+            {groupOrder.every((g) => expanded[g.id]) ? "Tout replier" : "Tout déplier"}
+          </button>
+        )}
       </div>
 
       <div className="toolbar">
@@ -7473,7 +7479,7 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
         <div className="empty-state"><Leaf size={26} strokeWidth={1.2} /><p>Aucune espèce ne correspond à ces critères.</p></div>
       ) : (
         groupOrder.map((g) => {
-          const isCollapsed = !!collapsed[g.id];
+          const isCollapsed = !q.trim() && !expanded[g.id]; // une recherche déplie automatiquement les sections
           return (
             <div className="taxo-section" key={g.id}>
               <button type="button" className="taxo-section-title taxo-section-title-toggle" onClick={() => toggleSection(g.id)}>
@@ -10173,7 +10179,7 @@ function Dashboard({ data, goSpecies, goSpeciesHub, goSpeciesStatus, goShopping,
       <div className="page-head"><div><Eyebrow>Aujourd'hui, {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</Eyebrow><h1>Tableau de bord</h1></div></div>
 
       <div className="stat-row">
-        <button type="button" className="stat-card stat-card-clickable" onClick={() => goSpeciesStatus(null)}>
+        <button type="button" className="stat-card stat-card-clickable" onClick={goSpeciesHub}>
           <span className="stat-num">{data.species.length}</span>
           <span className="stat-label">Espèces au total</span>
         </button>
