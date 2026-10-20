@@ -9337,6 +9337,246 @@ function PriceListPage({ data, onNavigate }) {
   );
 }
 
+/* ============================= ÉTIQUETTES DE VENTE (Avery Zweckform 3490) ============================= */
+
+// Gabarit Avery Zweckform 3490 : A4 portrait, 3 colonnes × 8 lignes, 70 × 36 mm, sans espace entre étiquettes.
+// Marge haute = (297 − 8×36)/2 = 4,5 mm (valeur déduite de la symétrie du gabarit ; ajustable via le calibrage dans la page).
+const LABEL_SHEET = { cols: 3, rows: 8, w: 70, h: 36, left: 0, top: 4.5, gapX: 0, gapY: 0 };
+const LABEL_STAGES = ["Œufs", "Oothèques", "L1", "L2", "L3", "Larves", "Nymphes", "Juvéniles", "Subadultes", "Adultes", "Couple", "Mâle adulte", "Femelle adulte", "Mixte"];
+const LABEL_UNITS = ["ind.", "œufs", "oothèques", "couples"];
+const LABELS_STORAGE_KEY = "vivarium_labels_v1";
+
+const escHtml = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Nom scientifique en italique ; mentions ouvertes (sp., cf., aff.…) et désignation de souche entre guillemets en caractères droits
+function sciNameHtml(name) {
+  const open = /^(sp\.?|spp\.?|cf\.?|aff\.?|nr\.?|×|x)$/i;
+  return String(name || "").split(/(\s+|"[^"]*")/).map((tok) => {
+    if (!tok.trim()) return tok;
+    if (tok.startsWith('"') || open.test(tok)) return `<span class="up">${escHtml(tok)}</span>`;
+    return escHtml(tok);
+  }).join("");
+}
+
+const formatLabelPrice = (p) => {
+  const raw = String(p ?? "").trim().replace(",", ".");
+  if (!raw) return "";
+  const n = Number(raw);
+  if (Number.isNaN(n)) return escHtml(String(p).trim());
+  return `CHF ${Number.isInteger(n) ? `${n}.–` : n.toFixed(2)}`;
+};
+
+function labelHtml(it, sp, pos, opts) {
+  const sci = sp?.sci_name || it.manualName || "";
+  const len = sci.length;
+  const fs = len <= 20 ? 14.5 : len <= 26 ? 12.5 : len <= 44 ? 10.5 : 9;
+  const loc = it.showLoc ? (sp?.localite_culture || sp?.localite_origine || "").trim() : "";
+  const qty = it.qte ? `${escHtml(it.qte)} ${escHtml(it.unite || "")}`.trim() : "";
+  const price = formatLabelPrice(it.prix);
+  const x = LABEL_SHEET.left + pos.col * (LABEL_SHEET.w + LABEL_SHEET.gapX) + opts.offX;
+  const y = LABEL_SHEET.top + pos.row * (LABEL_SHEET.h + LABEL_SHEET.gapY) + opts.offY;
+  return `<div class="lbl${opts.test ? " test" : ""}" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm">
+    ${opts.frame ? '<div class="fr"></div>' : ""}
+    <div class="in">
+      <div class="hd">
+        <img class="logo" src="${LOGO_PHASMES_URL}" alt="">
+        <div class="nm"><div class="sci" style="font-size:${fs}pt">${sciNameHtml(sci)}</div>${sp?.common_name ? `<div class="com">${escHtml(sp.common_name)}</div>` : ""}</div>
+      </div>
+      <div class="rule"></div>
+      <div class="ft">
+        <div class="kvs">
+          ${it.stade ? `<div class="kv"><span class="k">Stade</span><span class="v">${escHtml(it.stade)}</span></div>` : ""}
+          ${qty ? `<div class="kv"><span class="k">Quantité</span><span class="v">${qty}</span></div>` : ""}
+        </div>
+        ${price ? `<div class="pr">${price}</div>` : ""}
+      </div>
+      ${loc ? `<div class="loc">${escHtml(loc)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+// Document HTML autonome (@page propre : A4, marges 0) — sert à la fois à l'aperçu et à l'impression, indépendamment des autres exports
+function buildLabelsDocument(slots, opts) {
+  const perSheet = LABEL_SHEET.cols * LABEL_SHEET.rows;
+  const nSheets = Math.max(1, Math.ceil((opts.startPos - 1 + slots.length) / perSheet));
+  const sheets = [];
+  for (let s = 0; s < nSheets; s++) {
+    const cells = [];
+    for (let k = 0; k < perSheet; k++) {
+      const idx = s * perSheet + k - (opts.startPos - 1);
+      if (idx < 0 || idx >= slots.length) continue;
+      cells.push(labelHtml(slots[idx].it, slots[idx].sp, { col: k % LABEL_SHEET.cols, row: Math.floor(k / LABEL_SHEET.cols) }, opts));
+    }
+    sheets.push(`<section class="sheet${s < nSheets - 1 ? " brk" : ""}">${cells.join("")}</section>`);
+  }
+  const css = `
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,500;0,600;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap');
+@page{ size:A4 portrait; margin:0; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:${opts.preview ? "#d9d9d2" : "#fff"}; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+body{ font-family:'Inter',Arial,sans-serif; color:#1f2a1f; }
+.sheet{ position:relative; width:210mm; height:296.6mm; overflow:hidden; background:#fff; ${opts.preview ? "margin:0 0 8mm; box-shadow:0 1px 6px rgba(0,0,0,.25);" : ""} }
+.brk{ break-after:page; page-break-after:always; }
+.lbl{ position:absolute; width:${LABEL_SHEET.w}mm; height:${LABEL_SHEET.h}mm; overflow:hidden; }
+.lbl.test{ outline:0.2mm dashed #9a9a9a; outline-offset:-0.1mm; }
+.fr{ position:absolute; inset:1.3mm; border:0.3mm solid #C8D2BD; border-radius:2mm; }
+.in{ position:absolute; inset:0; padding:3.2mm 3.8mm 3mm; display:flex; flex-direction:column; justify-content:space-between; }
+.hd{ display:flex; align-items:center; gap:2.4mm; min-height:12.5mm; }
+.logo{ width:12.5mm; height:12.5mm; object-fit:contain; flex-shrink:0; }
+.nm{ min-width:0; flex:1; }
+.sci{ font-family:'Crimson Pro',Georgia,serif; font-style:italic; font-weight:600; color:#2C4A2E; line-height:1.08; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.sci .up{ font-style:normal; }
+.com{ font-size:7pt; color:#5b6b5d; margin-top:0.6mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rule{ height:0; border-top:0.3mm solid #C8D2BD; margin:1.2mm 0; }
+.ft{ display:flex; align-items:flex-end; justify-content:space-between; gap:2mm; }
+.kvs{ display:flex; gap:4.5mm; flex-wrap:wrap; min-width:0; }
+.kv{ display:flex; flex-direction:column; }
+.k{ font-size:5.8pt; text-transform:uppercase; letter-spacing:0.08em; color:#7d8c7a; font-weight:600; }
+.v{ font-size:9pt; font-weight:600; color:#1f2a1f; }
+.pr{ font-size:13pt; font-weight:700; color:#2C4A2E; white-space:nowrap; }
+.loc{ font-size:6.8pt; color:#405A43; margin-top:0.8mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.loc::before{ content:"Souche / localité : "; color:#7d8c7a; }`;
+  return { html: `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Étiquettes phasmes.ch</title><style>${css}</style></head><body>${sheets.join("")}</body></html>`, nSheets };
+}
+
+function LabelsPage({ data }) {
+  const species = [...data.species].sort((a, b) => (a.sci_name || "").localeCompare(b.sci_name || "", "fr", { sensitivity: "base" }));
+  const load = () => { try { return JSON.parse(localStorage.getItem(LABELS_STORAGE_KEY) || "null") || {}; } catch (e) { return {}; } };
+  const init = useMemo(load, []);
+  const [items, setItems] = useState(init.items || []);
+  const [startPos, setStartPos] = useState(init.startPos || 1);
+  const [offX, setOffX] = useState(init.offX || 0);
+  const [offY, setOffY] = useState(init.offY || 0);
+  const [frame, setFrame] = useState(init.frame !== false);
+  const [test, setTest] = useState(!!init.test);
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(LABELS_STORAGE_KEY, JSON.stringify({ items, startPos, offX, offY, frame, test })); } catch (e) {}
+  }, [items, startPos, offX, offY, frame, test]);
+
+  const spById = (id) => data.species.find((s) => s.id === id);
+  const addItem = () => setItems((l) => [...l, { id: uid("lbl"), spId: species[0]?.id || "", stade: "", qte: "", unite: "ind.", prix: "", showLoc: false, copies: 1 }]);
+  const upd = (id, patch) => setItems((l) => l.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+  const remove = (id) => setItems((l) => l.filter((i) => i.id !== id));
+  const duplicate = (id) => setItems((l) => { const i = l.find((x) => x.id === id); return i ? [...l, { ...i, id: uid("lbl") }] : l; });
+
+  const slots = items.filter((i) => spById(i.spId)).flatMap((i) => Array.from({ length: Math.max(1, Math.min(48, Number(i.copies) || 1)) }, () => ({ it: i, sp: spById(i.spId) })));
+  const opts = { startPos: Math.min(24, Math.max(1, Number(startPos) || 1)), offX: Number(offX) || 0, offY: Number(offY) || 0, frame, test };
+  const doc = useMemo(() => buildLabelsDocument(slots, { ...opts, preview: true }), [JSON.stringify(slots.map((s) => [s.it, s.sp.id, s.sp.sci_name, s.sp.common_name, s.sp.localite_culture, s.sp.localite_origine])), startPos, offX, offY, frame, test]);
+
+  const print = () => {
+    if (slots.length === 0) return;
+    setPrinting(true);
+    const { html } = buildLabelsDocument(slots, { ...opts, preview: false });
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    iframe.srcdoc = html;
+    iframe.onload = async () => {
+      const w = iframe.contentWindow;
+      try { await Promise.race([w.document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]); } catch (e) {}
+      await Promise.all(Array.from(w.document.images).map((im) => (im.complete ? null : new Promise((r) => { im.onload = r; im.onerror = r; setTimeout(r, 4000); }))));
+      setPrinting(false);
+      w.focus();
+      w.print();
+      setTimeout(() => iframe.remove(), 60000);
+    };
+    document.body.appendChild(iframe);
+  };
+
+  const scale = 0.58;
+  const pageH = 297 + 8;
+  const perSheet = LABEL_SHEET.cols * LABEL_SHEET.rows;
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div><Eyebrow>Vente</Eyebrow><h1>Étiquettes de vente</h1></div>
+        <button className="btn-primary" disabled={slots.length === 0 || printing} onClick={print}><Printer size={16} /> {printing ? "Préparation…" : "Imprimer / PDF"}</button>
+      </div>
+      <p className="muted" style={{ marginBottom: 14 }}>
+        Planche Avery Zweckform 3490 (70 × 36 mm, 24 par feuille, A4 portrait). Dans la fenêtre d'impression : échelle <strong>100 % / taille réelle</strong>, marges « aucune », sans « ajuster à la page ».
+      </p>
+
+      <div className="lbl-layout">
+        <div className="lbl-form">
+          {items.length === 0 && <div className="empty-state"><Tag size={26} strokeWidth={1.2} /><p>Aucune étiquette. Ajoute une première étiquette pour commencer.</p></div>}
+          {items.map((it) => {
+            const sp = spById(it.spId);
+            const tarifs = sp?.tarifs || [];
+            return (
+              <div className="lbl-card" key={it.id}>
+                <div className="field-grid">
+                  <label className="field field-wide"><span className="field-label">Espèce</span>
+                    <select value={it.spId} onChange={(e) => upd(it.id, { spId: e.target.value, prix: "" })}>
+                      {species.map((s) => <option key={s.id} value={s.id}>{s.sci_name}{s.common_name ? ` — ${s.common_name}` : ""}</option>)}
+                    </select>
+                  </label>
+                  <label className="field"><span className="field-label">Stade</span>
+                    <input list="lbl-stades" value={it.stade} onChange={(e) => upd(it.id, { stade: e.target.value })} placeholder="ex. Nymphes" />
+                  </label>
+                  <label className="field"><span className="field-label">Quantité</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input type="number" min="0" value={it.qte} onChange={(e) => upd(it.id, { qte: e.target.value })} style={{ width: "50%" }} />
+                      <select value={it.unite} onChange={(e) => upd(it.id, { unite: e.target.value })} style={{ width: "50%" }}>{LABEL_UNITS.map((u) => <option key={u}>{u}</option>)}</select>
+                    </div>
+                  </label>
+                  <label className="field"><span className="field-label">Prix (CHF, facultatif)</span>
+                    <input value={it.prix} onChange={(e) => upd(it.id, { prix: e.target.value })} placeholder="ex. 12" />
+                  </label>
+                  <label className="field"><span className="field-label">Tarif enregistré</span>
+                    <select value="" onChange={(e) => { const t = tarifs.find((x) => x.id === e.target.value); if (t) upd(it.id, { prix: String(t.prix) }); }} disabled={tarifs.length === 0}>
+                      <option value="">{tarifs.length ? "— Choisir —" : "Aucun tarif"}</option>
+                      {tarifs.map((t) => <option key={t.id} value={t.id}>{t.lot} — {t.prix} CHF</option>)}
+                    </select>
+                  </label>
+                  <label className="field"><span className="field-label">Exemplaires</span>
+                    <input type="number" min="1" max="48" value={it.copies} onChange={(e) => upd(it.id, { copies: e.target.value })} />
+                  </label>
+                  <label className="field" style={{ justifyContent: "flex-end" }}>
+                    <span className="toggle-only"><input type="checkbox" checked={it.showLoc} onChange={(e) => upd(it.id, { showLoc: e.target.checked })} /> Afficher souche / localité{sp && (sp.localite_culture || sp.localite_origine) ? ` (${sp.localite_culture || sp.localite_origine})` : " (non renseignée)"}</span>
+                  </label>
+                </div>
+                <div className="lbl-actions">
+                  <button className="btn-ghost-sm" onClick={() => duplicate(it.id)}>Dupliquer</button>
+                  <button className="btn-ghost-sm" onClick={() => remove(it.id)}><Trash2 size={13} /> Retirer</button>
+                </div>
+              </div>
+            );
+          })}
+          <datalist id="lbl-stades">{LABEL_STAGES.map((s) => <option key={s} value={s} />)}</datalist>
+          <button className="btn-ghost" onClick={addItem} disabled={species.length === 0}><Plus size={15} /> Ajouter une étiquette</button>
+
+          <div className="lbl-card" style={{ marginTop: 14 }}>
+            <Eyebrow>Planche</Eyebrow>
+            <div className="field-grid">
+              <label className="field"><span className="field-label">Première case libre (1–24)</span>
+                <input type="number" min="1" max="24" value={startPos} onChange={(e) => setStartPos(e.target.value)} />
+              </label>
+              <label className="field"><span className="field-label">Décalage horizontal (mm)</span>
+                <input type="number" step="0.1" value={offX} onChange={(e) => setOffX(e.target.value)} />
+              </label>
+              <label className="field"><span className="field-label">Décalage vertical (mm)</span>
+                <input type="number" step="0.1" value={offY} onChange={(e) => setOffY(e.target.value)} />
+              </label>
+            </div>
+            <label className="toggle-only"><input type="checkbox" checked={frame} onChange={(e) => setFrame(e.target.checked)} /> Cadre vert sauge autour de chaque étiquette</label>
+            <label className="toggle-only"><input type="checkbox" checked={test} onChange={(e) => setTest(e.target.checked)} /> Tracer le gabarit en pointillé (test sur papier ordinaire)</label>
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Fais d'abord un essai sur papier ordinaire avec le gabarit tracé, superpose-le à une planche vierge à contre-jour, puis corrige avec les décalages si besoin.</p>
+          </div>
+        </div>
+
+        <div className="lbl-preview">
+          <Eyebrow>Aperçu — {slots.length} étiquette{slots.length > 1 ? "s" : ""}, {doc.nSheets} planche{doc.nSheets > 1 ? "s" : ""}</Eyebrow>
+          <div style={{ width: `${210 * scale}mm`, height: `${doc.nSheets * pageH * scale}mm`, overflow: "hidden" }}>
+            <iframe title="Aperçu des étiquettes" srcDoc={doc.html} style={{ width: "210mm", height: `${doc.nSheets * pageH}mm`, border: 0, transform: `scale(${scale})`, transformOrigin: "top left" }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShelfManagerModal({ shelves, terrariums, onClose, onSave }) {
   const [list, setList] = useState(shelves);
   const [confirmDelId, setConfirmDelId] = useState(null);
@@ -10174,6 +10414,7 @@ const NAV = [
   { id: "species", label: "Espèces", icon: Bug },
   { id: "terrariums", label: "Terrariums", icon: Box },
   { id: "pricelist", label: "Liste de prix", icon: Tag },
+  { id: "labels", label: "Étiquettes", icon: Printer },
   { id: "hatching-stats", label: "Éclosions", icon: Egg },
   { id: "history", label: "Historique", icon: HistoryIcon },
   { id: "tasks", label: "Interventions", icon: ListChecks },
@@ -10315,6 +10556,7 @@ export default function App() {
             )}
             {view.page === "terrariums" && <TerrariumsPage data={data} setData={setData} />}
             {view.page === "pricelist" && <PriceListPage data={data} onNavigate={goSpecies} />}
+            {view.page === "labels" && <LabelsPage data={data} />}
             {view.page === "hatching-stats" && <HatchingStatsPage data={data} setData={setData} onNavigate={goSpecies} />}
             {view.page === "history" && <HistoryPage data={data} setData={setData} />}
             {view.page === "tasks" && <TasksPage data={data} setData={setData} />}
@@ -10752,6 +10994,11 @@ input,select,textarea{ font-family:inherit; }
   .page{ padding:calc(env(safe-area-inset-top, 0px) + 70px) 18px 50px; }
 }
 
+.lbl-layout{ display:grid; grid-template-columns:minmax(300px,1fr) auto; gap:24px; align-items:start; }
+.lbl-card{ background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--radius); padding:14px; margin-bottom:12px; display:flex; flex-direction:column; gap:10px; }
+.lbl-actions{ display:flex; gap:8px; justify-content:flex-end; }
+.lbl-preview{ overflow:auto; max-width:100%; }
+@media (max-width:1100px){ .lbl-layout{ grid-template-columns:1fr; } }
 .print-footer{ display:none; }
 .print-only-text{ display:none; }
 .print-sheet{ display:none; }
