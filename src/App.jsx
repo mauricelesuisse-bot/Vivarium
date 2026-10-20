@@ -8487,7 +8487,10 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
               <h2>Conditions d'élevage</h2>
               {sp.conditions?.temp_ideale && <p><strong>Température : </strong>{sp.conditions.temp_ideale}</p>}
               {sp.conditions?.hygrometrie && <p><strong>Hygrométrie : </strong>{sp.conditions.hygrometrie}</p>}
-              {sp.conditions?.ventilation && <p><strong>Ventilation : </strong>{sp.conditions.ventilation}</p>}
+              {sp.conditions?.pulverisation && <p><strong>Pulvérisation : </strong>{sp.conditions.pulverisation}</p>}
+              {sp.conditions?.ventilation_niveau ? (
+                <p><strong>Ventilation : </strong>{VENTILATION_LEVELS.find((v) => v.id === sp.conditions.ventilation_niveau)?.label}</p>
+              ) : sp.conditions?.ventilation && <p><strong>Ventilation : </strong>{sp.conditions.ventilation}</p>}
               {sp.conditions?.eclairage && <p><strong>Éclairage : </strong>{sp.conditions.eclairage}</p>}
               {sp.conditions?.substrat && <p><strong>Substrat : </strong>{sp.conditions.substrat}</p>}
               {sp.conditions?.type_terrarium && <p><strong>Terrarium conseillé : </strong>{sp.conditions.type_terrarium}</p>}
@@ -10767,10 +10770,10 @@ input,select,textarea{ font-family:inherit; }
 .elv-warning{ display:flex; gap:8px; align-items:flex-start; background:#f6e9e0; border:1.5px solid #b85a3e; border-radius:4px; padding:7px 10px; margin-bottom:11px; font-size:11px; color:#7a3a26; }
 .elv-cols{ display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
 .elv-block{ break-inside:avoid; margin-bottom:11px; }
-.elv-block h2{ font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em; color:#fff; background:#2C4A2E; padding:3px 8px; margin:0 0 6px; border-radius:2px; }
+.elv-block h2{ font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#2C4A2E; border-bottom:1.5px solid #2C4A2E; padding:0 0 3px; margin:0 0 7px; }
 .elv-block p{ font-size:11px; margin:0 0 3.5px; color:#161616; line-height:1.34; }
 .elv-block p strong{ color:#333; }
-.elv-mention{ font-size:9.5px; line-height:1.4; color:#555; background:#f6f4ec; border:1px solid #e4dfce; border-radius:4px; padding:6px 10px; margin:4px 0 10px; }
+.elv-mention{ font-size:11px; font-weight:500; line-height:1.42; color:#4a4030; background:#f6f4ec; border:1px solid #e4dfce; border-radius:4px; padding:7px 11px; margin:4px 0 10px; }
 .elv-footer{ display:flex; align-items:center; gap:6px; padding-top:6px; border-top:1px solid #ccc; font-size:9px; color:#666; font-family:'IBM Plex Mono',monospace; }
 .elv-footer img{ width:22px; height:22px; object-fit:contain; }
 /* Densité adaptative — appliquée dynamiquement en JS (printElevage) pour garantir 1 seule page A4, sans jamais
@@ -10781,14 +10784,14 @@ input,select,textarea{ font-family:inherit; }
 .elv-d1 .elv-mention{ margin:3px 0 7px; padding:5px 9px; }
 .elv-drop-secondary .elv-secondary{ display:none; }
 .elv-d2 .elv-header h1{ font-size:21px; }
-.elv-d2 .elv-block h2{ font-size:10.5px; }
+.elv-d2 .elv-block h2{ font-size:11px; }
 .elv-d2 .elv-block p{ font-size:10px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-.elv-d2 .elv-mention{ font-size:9px; }
+.elv-d2 .elv-mention{ font-size:10px; padding:6px 10px; }
 .elv-d3 .elv-header h1{ font-size:19px; }
 .elv-d3 .elv-logo, .elv-d3 .elv-photo{ width:56px; height:56px; }
-.elv-d3 .elv-block h2{ font-size:9.5px; padding:2px 6px; }
+.elv-d3 .elv-block h2{ font-size:10px; }
 .elv-d3 .elv-block p{ font-size:9px; -webkit-line-clamp:2; }
-.elv-d3 .elv-mention{ font-size:8.5px; padding:4px 8px; }
+.elv-d3 .elv-mention{ font-size:9.5px; padding:5px 9px; }
 
 @media print{
   .no-print{ display:none !important; }
