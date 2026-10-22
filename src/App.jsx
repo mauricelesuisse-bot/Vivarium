@@ -9596,7 +9596,7 @@ const chf = (n) => (Number(String(n ?? "").replace(",", ".")) || 0).toFixed(2);
 const fmtDateCH = (iso) => (iso ? iso.split("-").reverse().join(".") : "");
 const addDaysISO = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + (Number(n) || 0)); return d.toISOString().slice(0, 10); };
 const nextInvoiceNumber = (invoices, year = new Date().getFullYear()) => {
-  const re = new RegExp(`^${year}-(\\d+)$`);
+  const re = /^\d{4}-(\d+)$/; // la numérotation se poursuit d'une année à l'autre : seule l'année du préfixe change
   const max = (invoices || []).reduce((m, i) => { const mt = String(i.numero || "").match(re); return mt ? Math.max(m, Number(mt[1])) : m; }, 0);
   return `${year}-${String(max + 1).padStart(3, "0")}`;
 };
@@ -9606,6 +9606,19 @@ const invoiceFileBase = (inv) => {
   const parts = String(inv.client?.nom || "").trim().split(/\s+/).filter(Boolean);
   const fam = clean(parts.length ? parts[parts.length - 1] : "");
   return `Facture_${clean(inv.numero)}${fam ? `_${fam}` : ""}`;
+};
+// Modes d'envoi / de remise proposés (libellé affiché sur la facture, frais en CHF)
+const SHIPPING_PRESETS = [
+  { id: "priority", label: "Poste Priority", prix: "10.50" },
+  { id: "courrierA", label: "Courrier A (œufs)", prix: "1.20" },
+  { id: "retrait", label: "Retrait sur place", prix: "0" },
+  { id: "main", label: "Remise en main propre", prix: "0" },
+];
+// Ligne « envoi » des totaux : null si rien ; « Gratuit » quand le mode est renseigné sans frais
+const invoiceShipRow = (inv, t) => {
+  if (t.envoi) return { label: `Frais d'envoi${inv.envoiLabel ? ` (${inv.envoiLabel})` : ""}`, value: chf(t.envoi) };
+  if ((inv.envoiLabel || "").trim()) return { label: inv.envoiLabel.trim(), value: "Gratuit" };
+  return null;
 };
 const lineTotal = (l) => (Number(String(l.qte).replace(",", ".")) || 0) * (Number(String(l.prix).replace(",", ".")) || 0);
 function invoiceTotals(inv) {
@@ -9876,7 +9889,7 @@ p{ margin:0 0 1mm; line-height:1.4; } .g{ color:#5b6b5d; }
 <div class="box"><h3>Facturé à</h3>${[c.nom, c.compl, c.rue, c.npa, c.pays, c.email].filter((x) => x && x.trim()).map(escHtml).join("<br>")}</div>
 </div>
 <table class="it"><thead><tr><th>Désignation</th><th>Qté</th><th>Prix unitaire (CHF)</th><th>Total (CHF)</th></tr></thead><tbody>${sec("Animaux", views("animal"))}${sec("Matériel", views("materiel"))}</tbody></table>
-<table class="tot"><tr><td>Sous-total</td><td>${chf(t.sub)}</td></tr>${t.envoi ? `<tr><td>Frais d'envoi${inv.envoiLabel ? ` (${escHtml(inv.envoiLabel)})` : ""}</td><td>${chf(t.envoi)}</td></tr>` : ""}<tr class="g"><td>Total à payer (CHF)</td><td>${chf(t.total)}</td></tr></table>
+<table class="tot"><tr><td>Sous-total</td><td>${chf(t.sub)}</td></tr>${(() => { const r = invoiceShipRow(inv, t); return r ? `<tr><td>${escHtml(r.label)}</td><td>${r.value}</td></tr>` : ""; })()}<tr class="g"><td>Total à payer (CHF)</td><td>${chf(t.total)}</td></tr></table>
 ${inv.tva && inv.tva.trim() ? `<p class="tva">TVA : ${escHtml(inv.tva)}</p>` : ""}
 <h2>Conditions de paiement</h2>
 ${invoicePaymentLines(inv, settings).slice(0, qr ? 1 : 9).map((segs) => `<p>${segs.map((x) => (x.b ? `<b>${escHtml(x.t)}</b>` : x.g ? `<span class="g">${escHtml(x.t)}</span>` : escHtml(x.t))).join("")}</p>`).join("")}
@@ -9959,7 +9972,7 @@ function buildInvoiceDocx(D, inv, speciesList, logoBytes, settings) {
     new TableCell({ width: { size: 2900, type: WidthType.DXA }, borders: { ...noB, ...(strong ? { top: line(GREEN, 10) } : {}) }, margins: { top: 70, bottom: 70, left: 120, right: 120 }, children: [para(tr_(label, { bold: !!strong, color: strong ? GREEN : undefined, size: strong ? 24 : 21 }), { spacing: { after: 0 } })] }),
     new TableCell({ width: { size: 1200, type: WidthType.DXA }, borders: { ...noB, ...(strong ? { top: line(GREEN, 10) } : {}) }, margins: { top: 70, bottom: 70, left: 120, right: 120 }, children: [para(tr_(val, { bold: !!strong, color: strong ? GREEN : undefined, size: strong ? 24 : 21 }), { alignment: AlignmentType.RIGHT, spacing: { after: 0 } })] })] });
   const totRows = [trow("Sous-total", chf(t.sub))];
-  if (t.envoi) totRows.push(trow(`Frais d'envoi${inv.envoiLabel ? ` (${inv.envoiLabel})` : ""}`, chf(t.envoi)));
+  { const r = invoiceShipRow(inv, t); if (r) totRows.push(trow(r.label, r.value)); }
   totRows.push(trow("Total à payer (CHF)", chf(t.total), true));
   const totals = new Table({ width: { size: 4100, type: WidthType.DXA }, columnWidths: [2900, 1200], alignment: AlignmentType.RIGHT, borders: allNone, rows: totRows });
 
@@ -10285,12 +10298,18 @@ function InvoicesPage({ data, setData }) {
               <Field label="Date" type="date" value={inv.date} onChange={(v) => {
                 const y = Number(String(v).slice(0, 4));
                 const auto = /^\d{4}-\d+$/.test(String(inv.numero || ""));
-                if (v && y > 1999 && auto && Number(inv.numero.slice(0, 4)) !== y) set({ date: v, numero: nextInvoiceNumber((data.invoices || []).filter((i) => i.id !== inv.id), y) });
+                if (v && y > 1999 && auto && Number(inv.numero.slice(0, 4)) !== y) set({ date: v, numero: `${y}-${inv.numero.slice(5)}` });
                 else set({ date: v });
               }} />
               <Field label="Délai de paiement (jours)" type="number" value={inv.delai} onChange={(v) => set({ delai: v })} />
               <Field label="Mode de paiement" type="select" options={PAYMENT_MODES} value={inv.paiement || "twint"} onChange={(v) => setPaiement(v || "twint")} />
-              <Field label="Mode d'envoi" value={inv.envoiLabel} onChange={(v) => set({ envoiLabel: v })} />
+              <label className="field"><span className="field-label">Mode d'envoi / de remise</span>
+                <select value={SHIPPING_PRESETS.find((s) => s.label === inv.envoiLabel && String(s.prix) === String(inv.envoi))?.id || ""} onChange={(e) => { const s = SHIPPING_PRESETS.find((x) => x.id === e.target.value); if (s) set({ envoiLabel: s.label, envoi: s.prix }); }}>
+                  <option value="">— Autre (saisie libre ci-dessous) —</option>
+                  {SHIPPING_PRESETS.map((s) => <option key={s.id} value={s.id}>{s.label} — {Number(s.prix) ? `${s.prix} CHF` : "gratuit"}</option>)}
+                </select>
+              </label>
+              <Field label="Libellé affiché sur la facture" value={inv.envoiLabel} onChange={(v) => set({ envoiLabel: v })} />
               <Field label="Frais d'envoi (CHF)" value={inv.envoi} onChange={(v) => set({ envoi: v })} />
               <Field label="Mention TVA (facultatif)" value={inv.tva} onChange={(v) => set({ tva: v })} />
               <Field label="Remarques (livraison, etc.)" type="textarea" value={inv.remarques} onChange={(v) => set({ remarques: v })} />
