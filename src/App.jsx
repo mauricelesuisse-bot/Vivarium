@@ -11334,7 +11334,7 @@ export default function App() {
                 {saveStatus === "error" && <><AlertCircle size={11} /> Échec — vérifie ta connexion</>}
               </div>
               <button className="sidebar-signout" onClick={() => supabase.auth.signOut()}>Se déconnecter</button>
-              Élevage personnel d'invertébrés<br />© {new Date().getFullYear()} phasmes.ch
+              Élevage personnel d'invertébrés<br />© {new Date().getFullYear()} <a href="https://phasmes.ch" target="_blank" rel="noopener noreferrer" className="site-link">phasmes.ch</a>
             </div>
           </aside>
           {sidebarOpen && <div className="sidebar-scrim no-print" onClick={() => setSidebarOpen(false)} />}
@@ -11424,6 +11424,7 @@ input,select,textarea{ font-family:inherit; }
 .nav-item{ display:flex; align-items:center; gap:11px; padding:10px 12px; border:none; background:transparent; color:var(--text-dim); border-radius:var(--radius-sm); text-align:left; font-size:14px; transition:background .15s,color .15s; }
 .nav-item:hover{ background:var(--surface); color:var(--text); }
 .nav-item-active{ background:var(--surface-alt); color:var(--moss-deep); box-shadow:inset 2px 0 0 var(--amber); }
+.site-link{ color:inherit; text-decoration:underline; text-underline-offset:2px; } .site-link:hover{ color:var(--moss); }
 .sidebar-footer{ font-size:11px; color:var(--text-faint); padding:10px; border-top:1px solid var(--border-soft); margin-top:10px; font-family:'IBM Plex Mono',monospace; letter-spacing:0.4px; line-height:1.6; }
 .sidebar-account{ color:var(--text-dim); margin-bottom:6px; word-break:break-all; }
 .save-status{ display:flex; align-items:center; gap:4px; font-size:10.5px; margin-bottom:6px; height:14px; }
