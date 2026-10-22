@@ -453,7 +453,8 @@ const PHOTO_CATEGORIES = [
 
 const OBS_CATEGORIES = ["Observation générale", "Alimentation", "Reproduction", "Incubation", "Santé", "Croissance", "Maintenance"];
 
-const TARIF_LOTS = ["6 petits", "4 moyens / 2 couples sub", "1 couple imago", "20 œufs", "30 œufs", "Autre"];
+const STANDARD_LOTS = ["À l'unité", "Couple adulte", "Sub-adulte", "6 juvéniles"]; // lots types proposés pour chaque espèce
+const TARIF_LOTS = [...STANDARD_LOTS, "6 petits", "4 moyens / 2 couples sub", "1 couple imago", "20 œufs", "30 œufs", "Autre"];
 
 const INCUBATION_EVENTS = [
   { id: "recolte", label: "Récolte des œufs" },
@@ -8286,6 +8287,8 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           tarifs={sp.tarifs || []}
           onAdd={(tarif) => updateSp({ tarifs: [...(sp.tarifs || []), { ...tarif, id: uid("tarif") }] })}
           onRemove={(id) => updateSp({ tarifs: (sp.tarifs || []).filter((t) => t.id !== id) })}
+          onUpdate={(id, patch) => updateSp({ tarifs: (sp.tarifs || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) })}
+          onAddStandard={() => updateSp({ tarifs: [...(sp.tarifs || []), ...STANDARD_LOTS.filter((l) => !(sp.tarifs || []).some((t) => t.lot === l)).map((l) => ({ id: uid("tarif"), lot: l, prix: "" }))] })}
         />
       )}
 
@@ -8745,7 +8748,7 @@ function ObservationsPanel({ observations, onAdd, onRemove, onUpdate, terrariums
   );
 }
 
-function TarifsPanel({ tarifs, onAdd, onRemove }) {
+function TarifsPanel({ tarifs, onAdd, onRemove, onUpdate, onAddStandard }) {
   const [form, setForm] = useState({ lot: TARIF_LOTS[0], lot_libre: "", prix: "" });
   const isAutre = form.lot === "Autre";
   const submit = () => {
@@ -8763,6 +8766,7 @@ function TarifsPanel({ tarifs, onAdd, onRemove }) {
           <Field label="Prix (CHF)" type="number" value={form.prix} onChange={(v) => setForm((f) => ({ ...f, prix: v }))} />
         </div>
         <button className="btn-primary-sm" onClick={submit}><Plus size={14} /> Ajouter le tarif</button>
+        <button className="btn-ghost-sm" style={{ marginLeft: 8 }} onClick={onAddStandard}><Plus size={13} /> Ajouter les lots types (à l'unité, couple adulte, sub-adulte, 6 juvéniles)</button>
       </div>
       <div className="obs-list">
         {tarifs.length === 0 && <div className="empty-state"><p>Aucun tarif défini pour cette espèce.</p></div>}
@@ -8770,7 +8774,8 @@ function TarifsPanel({ tarifs, onAdd, onRemove }) {
           <div className="obs-item" key={t.id}>
             <div className="obs-item-head">
               <span className="meta-tag">{t.lot}</span>
-              <span className="tarif-prix">{t.prix} CHF</span>
+              <span className="tarif-prix print-only-text">{t.prix} CHF</span>
+              <input className="tarif-input no-print" inputMode="decimal" placeholder="Prix" value={t.prix ?? ""} onChange={(e) => onUpdate(t.id, { prix: e.target.value })} /><span className="muted no-print" style={{ fontSize: 12 }}>CHF</span>
               <button className="icon-btn-sm no-print" onClick={() => onRemove(t.id)}><X size={12} /></button>
             </div>
           </div>
@@ -9301,21 +9306,55 @@ function HatchingStatsPage({ data, setData, onNavigate }) {
 }
 
 
-function PriceListPage({ data, onNavigate }) {
-  const withTarifs = data.species.filter((s) => (s.tarifs || []).length > 0);
+// Bloc de tarifs « hors espèce » (œufs, matériel) : modifiable à l'écran, listé à l'impression (seulement les lignes avec un prix)
+function PriceExtrasCard({ title, items, labelKey, onChange, newItem, addLabel }) {
+  const priced = items.filter((x) => String(x.prix ?? "").trim() !== "");
+  const upd = (id, patch) => onChange(items.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  return (
+    <div className="ter-card">
+      <div className="ter-card-head"><h3>{title}</h3></div>
+      <div className="no-print">
+        {items.map((x) => (
+          <div className="tarif-row" key={x.id} style={{ gap: 8, alignItems: "center" }}>
+            <input className="tarif-input" style={{ flex: 1, width: "auto", textAlign: "left" }} value={x[labelKey] || ""} onChange={(e) => upd(x.id, { [labelKey]: e.target.value })} placeholder="Libellé" />
+            <input className="tarif-input" inputMode="decimal" placeholder="Prix" value={x.prix ?? ""} onChange={(e) => upd(x.id, { prix: e.target.value })} /><span className="muted" style={{ fontSize: 12 }}>CHF</span>
+            <button className="icon-btn-sm" onClick={() => onChange(items.filter((y) => y.id !== x.id))}><X size={12} /></button>
+          </div>
+        ))}
+        <button type="button" className="btn-ghost-sm" style={{ marginTop: 8 }} onClick={() => onChange([...items, newItem()])}><Plus size={13} /> {addLabel}</button>
+      </div>
+      <div className="print-only-block">
+        {priced.map((x) => (<div className="tarif-row" key={x.id}><span>{x[labelKey]}</span><span className="tarif-prix">{x.prix} CHF</span></div>))}
+      </div>
+    </div>
+  );
+}
+
+function PriceListPage({ data, setData, onNavigate }) {
+  const withTarifs = data.species.map((s) => ({ ...s, tarifs: (s.tarifs || []).filter((t) => String(t.prix ?? "").trim() !== "") })).filter((s) => s.tarifs.length > 0);
+  const eggs = data.priceExtras?.eggs || [{ id: "egg20", lot: "20 œufs", prix: "" }, { id: "egg30", lot: "30 œufs", prix: "" }];
+  const materiel = data.materiel || DEFAULT_MATERIEL;
+  const setEggs = (list) => setData((d) => ({ ...d, priceExtras: { ...(d.priceExtras || {}), eggs: list } }));
+  const setMateriel = (list) => setData((d) => ({ ...d, materiel: list }));
+  const hasExtras = eggs.some((x) => String(x.prix ?? "").trim() !== "") || materiel.some((x) => String(x.prix ?? "").trim() !== "");
   return (
     <div className="page">
       <div className="page-head">
         <div><Eyebrow>Vente</Eyebrow><h1>Liste de prix</h1></div>
-        {withTarifs.length > 0 && (
+        {(withTarifs.length > 0 || hasExtras) && (
           <button className="btn-ghost-sm no-print" onClick={() => window.print()}><Printer size={14} /> Exporter en PDF</button>
         )}
       </div>
+      <p className="muted no-print" style={{ fontSize: 12.5 }}>Les prix des œufs et du matériel se modifient ici (le matériel est le même catalogue que dans les factures). Les prix par espèce se règlent dans l'onglet « Tarifs » de chaque fiche : seuls les lots avec un prix apparaissent dans la liste.</p>
+      <div className="ter-grid">
+        <PriceExtrasCard title="Œufs de phasmes" items={eggs} labelKey="lot" onChange={setEggs} newItem={() => ({ id: uid("egg"), lot: "", prix: "" })} addLabel="Ajouter un lot d'œufs" />
+        <PriceExtrasCard title="Matériel" items={materiel} labelKey="nom" onChange={setMateriel} newItem={() => ({ id: uid("mat"), nom: "", note: "", prix: "" })} addLabel="Ajouter un article" />
+      </div>
       {withTarifs.length === 0 ? (
-        <div className="empty-state"><Tag size={26} strokeWidth={1.2} /><p>Aucun tarif défini pour l'instant. Ajoute des tarifs depuis l'onglet « Tarifs » d'une fiche espèce.</p></div>
+        <div className="empty-state"><Tag size={26} strokeWidth={1.2} /><p>Aucun tarif d'espèce défini pour l'instant. Ajoute-les depuis l'onglet « Tarifs » d'une fiche espèce (bouton « Ajouter les lots types »).</p></div>
       ) : (
         <>
-          <div className="ter-grid">
+          <div className="ter-grid" style={{ marginTop: 14 }}>
             {withTarifs.map((s) => (
               <div className="ter-card" key={s.id}>
                 <div className="ter-card-head">
@@ -9333,12 +9372,12 @@ function PriceListPage({ data, onNavigate }) {
               </div>
             ))}
           </div>
-          <div className="print-footer">
-            <img src={LOGO_PHASMES_URL} alt="Logo" />
-            <span>© {new Date().getFullYear()} phasmes.ch — Liste de prix générée depuis Vivarium, élevage personnel d'invertébrés</span>
-          </div>
         </>
       )}
+      <div className="print-footer">
+        <img src={LOGO_PHASMES_URL} alt="Logo" />
+        <span>© {new Date().getFullYear()} phasmes.ch — Liste de prix générée depuis Vivarium, élevage personnel d'invertébrés</span>
+      </div>
     </div>
   );
 }
@@ -11310,7 +11349,7 @@ export default function App() {
               <SpeciesList data={data} setData={setData} group={view.group} openSpecies={goSpecies} openNewSpecies={() => setCreatingSpecies(view.group)} onBackToHub={goSpeciesHub} />
             )}
             {view.page === "terrariums" && <TerrariumsPage data={data} setData={setData} />}
-            {view.page === "pricelist" && <PriceListPage data={data} onNavigate={goSpecies} />}
+            {view.page === "pricelist" && <PriceListPage data={data} setData={setData} onNavigate={goSpecies} />}
             {view.page === "labels" && <LabelsPage data={data} />}
             {view.page === "invoices" && <InvoicesPage data={data} setData={setData} />}
             {view.page === "hatching-stats" && <HatchingStatsPage data={data} setData={setData} onNavigate={goSpecies} />}
@@ -11760,7 +11799,8 @@ input,select,textarea{ font-family:inherit; }
 .inv-picker{ max-height:220px; overflow:auto; border:1px solid var(--border-soft); border-radius:var(--radius-sm); padding:6px 10px; background:var(--bg); }
 .inv-pick{ display:flex; gap:8px; align-items:flex-start; padding:4px 0; }
 .print-footer{ display:none; }
-.print-only-text{ display:none; }
+.print-only-text{ display:none; } .print-only-block{ display:none; }
+.tarif-input{ width:78px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--text); font-size:13px; text-align:right; }
 .print-sheet{ display:none; }
 /* Fiche d'élevage PDF — toujours montée hors écran (cachée par position+visibility, pas display:none) afin de pouvoir
    mesurer sa hauteur réelle avant impression et choisir la densité qui permet de tenir sur une seule page A4. */
@@ -11812,7 +11852,7 @@ input,select,textarea{ font-family:inherit; }
   .detail-overlay{ position:static; }
   .page{ padding:0; max-width:none; }
   .kv-value, .detail-sci-name, h1{ color:#111; }
-  .print-only-text{ display:inline; }
+  .print-only-text{ display:inline; } .print-only-block{ display:block; }
 
   body:not(.print-mode-elevage) .print-footer{ display:flex; align-items:center; gap:8px; margin-top:20px; padding-top:10px; border-top:1px solid #ccc; font-size:9px; color:#555; font-family:'IBM Plex Mono',monospace; }
   .print-footer img{ width:26px; height:26px; object-fit:contain; }
