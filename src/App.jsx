@@ -9600,6 +9600,13 @@ const nextInvoiceNumber = (invoices, year = new Date().getFullYear()) => {
   const max = (invoices || []).reduce((m, i) => { const mt = String(i.numero || "").match(re); return mt ? Math.max(m, Number(mt[1])) : m; }, 0);
   return `${year}-${String(max + 1).padStart(3, "0")}`;
 };
+// Nom de fichier : Facture_<numéro>_<nom de famille> (le nom de famille = dernier mot du nom du client)
+const invoiceFileBase = (inv) => {
+  const clean = (x) => String(x || "").normalize("NFC").replace(/[\\/:*?"<>|]+/g, "").trim().replace(/\s+/g, "-");
+  const parts = String(inv.client?.nom || "").trim().split(/\s+/).filter(Boolean);
+  const fam = clean(parts.length ? parts[parts.length - 1] : "");
+  return `Facture_${clean(inv.numero)}${fam ? `_${fam}` : ""}`;
+};
 const lineTotal = (l) => (Number(String(l.qte).replace(",", ".")) || 0) * (Number(String(l.prix).replace(",", ".")) || 0);
 function invoiceTotals(inv) {
   const sub = (inv.lines || []).reduce((s, l) => s + lineTotal(l), 0);
@@ -9860,7 +9867,7 @@ h2{ font-size:9pt; letter-spacing:0.1em; text-transform:uppercase; color:#2C4A2E
 p{ margin:0 0 1mm; line-height:1.4; } .g{ color:#5b6b5d; }
 .cl{ font-style:italic; color:#405A43; font-size:9pt; margin-top:4mm; break-inside:avoid; }
 .ft{ margin-top:4mm; border-top:0.3mm solid #C8D2BD; padding-top:2mm; text-align:center; font-size:8pt; color:#5b6b5d; break-inside:avoid; }${qr ? QR_SLIP_CSS : ""}`;
-  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Facture ${escHtml(inv.numero)}</title><style>${css}</style></head><body>${qr ? '<div class="sheet"><div class="main" id="main">' : ""}
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escHtml(invoiceFileBase(inv))}</title><style>${css}</style></head><body>${qr ? '<div class="sheet"><div class="main" id="main">' : ""}
 <div class="hd"><img src="data:image/jpeg;base64,${LOGO_INVOICE_B64}" alt="phasmes.ch"><span>Élevage d'invertébrés</span></div>
 <div class="ti"><h1>FACTURE</h1>
 <table class="meta"><tr><td>Facture n°</td><td>${escHtml(inv.numero)}</td></tr><tr><td>Date</td><td>${fmtDateCH(inv.date)}</td></tr>${inv.paiement === "cash" ? "" : `<tr><td>Échéance</td><td>${echeance}</td></tr>`}</table></div>
@@ -9881,15 +9888,18 @@ ${qr ? "</div>" : ""}<div class="ft">${escHtml(INVOICE_ISSUER.marque)} — ${esc
 }
 
 // Impression d'un document HTML autonome via un iframe invisible (le @page du document est respecté)
-function printHtmlDocument(html) {
+function printHtmlDocument(html, title) {
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
   iframe.srcdoc = html;
   iframe.onload = async () => {
     const w = iframe.contentWindow;
     try { await Promise.race([w.document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]); } catch (e) {}
+    const oldTitle = document.title;
+    if (title) { document.title = title; w.document.title = title; }
     w.focus();
     w.print();
+    if (title) setTimeout(() => { document.title = oldTitle; }, 3000);
     setTimeout(() => iframe.remove(), 60000);
   };
   document.body.appendChild(iframe);
@@ -9977,7 +9987,7 @@ async function downloadInvoiceDocx(inv, speciesList, settings) {
   const blob = await D.Packer.toBlob(buildInvoiceDocx(D, inv, speciesList, bytes, settings));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `Facture_${inv.numero}.docx`;
+  a.download = `${invoiceFileBase(inv)}.docx`;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
@@ -10096,7 +10106,7 @@ function InvoicesPage({ data, setData }) {
     else { const m = catalog.find((x) => x.id === id); if (m) setEditing((e) => ({ ...e, lines: [...e.lines, { id: uid("ln"), kind: "materiel", desc: m.nom, note: m.note || "", qte: "1", prix: String(m.prix || "") }] })); }
   };
 
-  const doPrint = () => { save(inv); printHtmlDocument(buildInvoiceHtml(inv, data.species, settings)); };
+  const doPrint = () => { save(inv); printHtmlDocument(buildInvoiceHtml(inv, data.species, settings), invoiceFileBase(inv)); };
   const doWord = async () => {
     save(inv); setError(""); setBusy("word");
     try { await downloadInvoiceDocx(inv, data.species, settings); }
@@ -10231,7 +10241,12 @@ function InvoicesPage({ data, setData }) {
             <Eyebrow>Facture, envoi et paiement</Eyebrow>
             <div className="field-grid">
               <Field label="N° de facture (automatique)" value={inv.numero} onChange={(v) => set({ numero: v })} />
-              <Field label="Date" type="date" value={inv.date} onChange={(v) => set({ date: v })} />
+              <Field label="Date" type="date" value={inv.date} onChange={(v) => {
+                const y = Number(String(v).slice(0, 4));
+                const auto = /^\d{4}-\d+$/.test(String(inv.numero || ""));
+                if (v && y > 1999 && auto && Number(inv.numero.slice(0, 4)) !== y) set({ date: v, numero: nextInvoiceNumber((data.invoices || []).filter((i) => i.id !== inv.id), y) });
+                else set({ date: v });
+              }} />
               <Field label="Délai de paiement (jours)" type="number" value={inv.delai} onChange={(v) => set({ delai: v })} />
               <Field label="Mode de paiement" type="select" options={PAYMENT_MODES} value={inv.paiement || "twint"} onChange={(v) => setPaiement(v || "twint")} />
               <Field label="Mode d'envoi" value={inv.envoiLabel} onChange={(v) => set({ envoiLabel: v })} />
