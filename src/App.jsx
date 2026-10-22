@@ -9792,17 +9792,18 @@ function invoicePaymentLines(inv, settings) {
 }
 const emptyInvoice = (invoices) => ({
   id: uid("inv"), numero: nextInvoiceNumber(invoices), date: todayISO(), delai: 30,
-  client: { nom: "", rue: "", npa: "", pays: "", email: "" },
+  client: { nom: "", compl: "", rue: "", npa: "", pays: "", email: "" },
   lines: [], envoiLabel: "Poste Priority", envoi: "10.50", tva: "", remarques: "", paid: false, paiement: "twint", clientId: "",
 });
 // Range une adresse collée en vrac (nom / rue / NPA Localité / pays / e-mail) dans les bons champs
 function parseAddress(text) {
   let lines = String(text || "").split(/\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 1) lines = lines[0].split(/\s*,\s*/).filter(Boolean);
-  const out = { nom: "", rue: "", npa: "", pays: "", email: "" };
+  const out = { nom: "", compl: "", rue: "", npa: "", pays: "", email: "" };
   const rest = [];
   lines.forEach((l) => {
     if (/^\S+@\S+\.\S+$/.test(l)) out.email = l;
+    else if (/^(c\/o|chez|attn|att\.|à l.attention)\b/i.test(l) && !out.compl) out.compl = l;
     else if (/^(CH[- ]?)?\d{4}\s+\S+/.test(l) && !out.npa) out.npa = l.replace(/^CH[- ]?/, "");
     else rest.push(l);
   });
@@ -9815,9 +9816,9 @@ function parseAddress(text) {
 // Données d'affichage d'une ligne (nom en italique pour un animal, détail en gris dessous)
 function invoiceLineView(l, speciesList) {
   const sp = l.kind === "animal" ? speciesList.find((s) => s.id === l.spId) : null;
-  const title = l.kind === "animal" ? (sp?.sci_name || "Espèce") : (l.desc || "Matériel");
+  const title = l.kind === "animal" ? (sp?.sci_name || l.sciLibre || "Espèce") : (l.desc || "Matériel");
   const loc = l.kind === "animal" && l.showLoc ? (sp?.localite_culture || sp?.localite_origine || "") : "";
-  const sub = (l.kind === "animal" ? [sp?.common_name, l.lot, l.stade, loc, l.note] : [l.note]).filter((x) => x && String(x).trim()).join(" — ");
+  const sub = (l.kind === "animal" ? [sp?.common_name || l.commonLibre, l.lot, l.stade, loc, l.note] : [l.note]).filter((x) => x && String(x).trim()).join(" — ");
   return { title, sub, italic: l.kind === "animal", qte: l.qte, prix: chf(l.prix), total: chf(lineTotal(l)) };
 }
 const INVOICE_CLOSING = "Merci pour votre confiance ! Ces animaux sont des invertébrés exotiques : ne les relâchez jamais dans la nature. En cas de surplus, privilégiez les dons ou les échanges.";
@@ -9865,7 +9866,7 @@ p{ margin:0 0 1mm; line-height:1.4; } .g{ color:#5b6b5d; }
 <table class="meta"><tr><td>Facture n°</td><td>${escHtml(inv.numero)}</td></tr><tr><td>Date</td><td>${fmtDateCH(inv.date)}</td></tr>${inv.paiement === "cash" ? "" : `<tr><td>Échéance</td><td>${echeance}</td></tr>`}</table></div>
 <div class="pt">
 <div class="box"><h3>Émetteur</h3>${escHtml(INVOICE_ISSUER.nom)}<br>${escHtml(INVOICE_ISSUER.marque)}<br>${escHtml(INVOICE_ISSUER.rue)}<br>${escHtml(INVOICE_ISSUER.npa)}<br>${escHtml(INVOICE_ISSUER.email)} · ${escHtml(INVOICE_ISSUER.tel)}</div>
-<div class="box"><h3>Facturé à</h3>${[c.nom, c.rue, c.npa, c.pays, c.email].filter((x) => x && x.trim()).map(escHtml).join("<br>")}</div>
+<div class="box"><h3>Facturé à</h3>${[c.nom, c.compl, c.rue, c.npa, c.pays, c.email].filter((x) => x && x.trim()).map(escHtml).join("<br>")}</div>
 </div>
 <table class="it"><thead><tr><th>Désignation</th><th>Qté</th><th>Prix unitaire (CHF)</th><th>Total (CHF)</th></tr></thead><tbody>${sec("Animaux", views("animal"))}${sec("Matériel", views("materiel"))}</tbody></table>
 <table class="tot"><tr><td>Sous-total</td><td>${chf(t.sub)}</td></tr>${t.envoi ? `<tr><td>Frais d'envoi${inv.envoiLabel ? ` (${escHtml(inv.envoiLabel)})` : ""}</td><td>${chf(t.envoi)}</td></tr>` : ""}<tr class="g"><td>Total à payer (CHF)</td><td>${chf(t.total)}</td></tr></table>
@@ -9926,7 +9927,7 @@ function buildInvoiceDocx(D, inv, speciesList, logoBytes, settings) {
     rows: [new TableRow({ children: [
       box("Émetteur", [INVOICE_ISSUER.nom, INVOICE_ISSUER.marque, INVOICE_ISSUER.rue, INVOICE_ISSUER.npa, `${INVOICE_ISSUER.email} · ${INVOICE_ISSUER.tel}`], 4739),
       new TableCell({ borders: noB, width: { size: 160, type: WidthType.DXA }, children: [para("")] }),
-      box("Facturé à", [c.nom, c.rue, c.npa, c.pays, c.email].filter((x) => x && x.trim()), 4739)] })] });
+      box("Facturé à", [c.nom, c.compl, c.rue, c.npa, c.pays, c.email].filter((x) => x && x.trim()), 4739)] })] });
 
   const W = [4538, 1000, 2050, 2050];
   const cell = (i, children) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER, margins: { top: 60, bottom: 60, left: 120, right: 120 }, borders: { top: none, left: none, right: none, bottom: line(SAGE, 4) }, children });
@@ -10075,7 +10076,7 @@ function InvoicesPage({ data, setData }) {
 
   const pickClient = (id) => {
     const c = clients.find((x) => x.id === id);
-    if (c) setEditing((e) => ({ ...e, clientId: c.id, client: { nom: c.nom || "", rue: c.rue || "", npa: c.npa || "", pays: c.pays || "", email: c.email || "" } }));
+    if (c) setEditing((e) => ({ ...e, clientId: c.id, client: { nom: c.nom || "", compl: c.compl || "", rue: c.rue || "", npa: c.npa || "", pays: c.pays || "", email: c.email || "" } }));
   };
   const applyPasted = () => { if (pasted.trim()) { setClient(parseAddress(pasted)); setPasted(""); } };
   const setPaiement = (m) => set({ paiement: m, paid: m === "cash" });
@@ -10133,6 +10134,7 @@ function InvoicesPage({ data, setData }) {
               </label>
               <button type="button" className="btn-ghost-sm" onClick={applyPasted} disabled={!pasted.trim()}>Remplir les champs</button>
               <Field label="Nom / société" value={inv.client.nom} onChange={(v) => setClient({ nom: v })} />
+              <Field label="Complément d'adresse (c/o, bâtiment, service…)" value={inv.client.compl || ""} onChange={(v) => setClient({ compl: v })} />
               <Field label="Rue et numéro" value={inv.client.rue} onChange={(v) => setClient({ rue: v })} />
               <Field label="NPA Localité" value={inv.client.npa} onChange={(v) => setClient({ npa: v })} />
               <Field label="Pays (si hors Suisse)" value={inv.client.pays} onChange={(v) => setClient({ pays: v })} />
@@ -10157,6 +10159,7 @@ function InvoicesPage({ data, setData }) {
               {matches.length > 60 && <p className="muted" style={{ fontSize: 12 }}>Affine la recherche pour voir les {matches.length - 60} autres.</p>}
             </div>
             <button className="btn-primary-sm" disabled={selCount === 0} onClick={addSelected}><Plus size={14} /> Ajouter {selCount > 0 ? `(${selCount})` : ""}</button>
+            <button type="button" className="btn-ghost-sm" style={{ marginLeft: 8 }} onClick={() => setEditing((e) => ({ ...e, lines: [...e.lines, { id: uid("ln"), kind: "animal", spId: "", sciLibre: q.trim(), commonLibre: "", lot: "", stade: "", note: "", showLoc: false, qte: "1", prix: "" }] }))}><Plus size={13} /> Autre / ancienne espèce (saisie libre)</button>
           </div>
 
           {inv.lines.map((l) => {
@@ -10164,10 +10167,12 @@ function InvoicesPage({ data, setData }) {
             const tarifs = sp?.tarifs || [];
             return (
               <div className="lbl-card" key={l.id}>
-                <Eyebrow>{l.kind === "animal" ? (sp?.sci_name || "Animal") : "Matériel"}</Eyebrow>
+                <Eyebrow>{l.kind === "animal" ? (sp?.sci_name || l.sciLibre || "Animal") : "Matériel"}</Eyebrow>
                 <div className="field-grid">
                   {l.kind === "animal" ? (
                     <>
+                      {!sp && <Field label="Espèce (nom scientifique)" value={l.sciLibre || ""} onChange={(v) => updLine(l.id, { sciLibre: v })} />}
+                      {!sp && <Field label="Nom commun (facultatif)" value={l.commonLibre || ""} onChange={(v) => updLine(l.id, { commonLibre: v })} />}
                       <label className="field"><span className="field-label">Lot (tarif enregistré)</span>
                         <select value={tarifs.find((t) => t.lot === l.lot && String(t.prix) === String(l.prix))?.id || ""} disabled={tarifs.length === 0} onChange={(e) => { const t = tarifs.find((x) => x.id === e.target.value); if (t) updLine(l.id, { lot: t.lot, prix: String(t.prix) }); }}>
                           <option value="">{tarifs.length ? "— Choisir un lot —" : "Aucun tarif"}</option>
