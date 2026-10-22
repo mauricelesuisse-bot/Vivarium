@@ -9830,7 +9830,7 @@ function invoiceLineView(l, speciesList) {
 }
 const INVOICE_CLOSING = "Merci pour votre confiance ! Ces animaux sont des invertébrés exotiques : ne les relâchez jamais dans la nature. En cas de surplus, privilégiez les dons ou les échanges.";
 
-function buildInvoiceHtml(inv, speciesList, settings) {
+function buildInvoiceHtml(inv, speciesList, settings, opts) {
   const t = invoiceTotals(inv);
   const echeance = fmtDateCH(addDaysISO(inv.date, inv.delai));
   const views = (kind) => (inv.lines || []).filter((l) => l.kind === kind).map((l) => invoiceLineView(l, speciesList));
@@ -9866,7 +9866,7 @@ tr.sec td{ background:#F7F8F2; font-size:7.5pt; letter-spacing:0.12em; text-tran
 h2{ font-size:9pt; letter-spacing:0.1em; text-transform:uppercase; color:#2C4A2E; border-bottom:0.3mm solid #C8D2BD; padding-bottom:1mm; margin:4mm 0 1.6mm; break-after:avoid; }
 p{ margin:0 0 1mm; line-height:1.4; } .g{ color:#5b6b5d; }
 .cl{ font-style:italic; color:#405A43; font-size:9pt; margin-top:4mm; break-inside:avoid; }
-.ft{ margin-top:4mm; border-top:0.3mm solid #C8D2BD; padding-top:2mm; text-align:center; font-size:8pt; color:#5b6b5d; break-inside:avoid; }${qr ? QR_SLIP_CSS : ""}`;
+.ft{ margin-top:4mm; border-top:0.3mm solid #C8D2BD; padding-top:2mm; text-align:center; font-size:8pt; color:#5b6b5d; break-inside:avoid; }${qr ? QR_SLIP_CSS : ""}${opts?.pdf && !qr ? "body{ padding:14mm 20mm; }" : ""}`;
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${escHtml(invoiceFileBase(inv))}</title><style>${css}</style></head><body>${qr ? '<div class="sheet"><div class="main" id="main">' : ""}
 <div class="hd"><img src="data:image/jpeg;base64,${LOGO_INVOICE_B64}" alt="phasmes.ch"><span>Élevage d'invertébrés</span></div>
 <div class="ti"><h1>FACTURE</h1>
@@ -9979,6 +9979,40 @@ function buildInvoiceDocx(D, inv, speciesList, logoBytes, settings) {
     sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1900, bottom: 1100, left: 1134, right: 1134, header: 500, footer: 500 } } }, headers: { default: header }, footers: { default: footer }, children }] });
 }
 
+// Téléchargement direct du PDF (sans passer par la fenêtre d'impression) : html2canvas + jsPDF chargés à la demande depuis un CDN
+const loadScriptOnce = (src) => new Promise((res, rej) => {
+  if (document.querySelector(`script[data-src="${src}"]`)) return res();
+  const s = document.createElement("script"); s.src = src; s.dataset.src = src; s.onload = res; s.onerror = () => rej(new Error("chargement " + src)); document.head.appendChild(s);
+});
+async function downloadInvoicePdf(inv, speciesList, settings) {
+  await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+  const W = 794, PH = 1123; // A4 à 96 dpi
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = `position:fixed;left:-10000px;top:0;width:${W}px;height:${PH}px;border:0`;
+  iframe.srcdoc = buildInvoiceHtml(inv, speciesList, settings, { pdf: true });
+  document.body.appendChild(iframe);
+  try {
+    await new Promise((r) => { iframe.onload = r; });
+    const doc = iframe.contentDocument;
+    try { await Promise.race([doc.fonts.ready, new Promise((r) => setTimeout(r, 2500))]); } catch (e) {}
+    await new Promise((r) => setTimeout(r, 400));
+    const isQr = inv.paiement === "qr";
+    const H = isQr ? PH : Math.max(PH, doc.documentElement.scrollHeight);
+    iframe.style.height = H + "px";
+    const canvas = await window.html2canvas(doc.documentElement, { scale: 3, backgroundColor: "#ffffff", useCORS: true, width: W, height: H, windowWidth: W, windowHeight: H });
+    const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4", compress: true });
+    const pages = Math.ceil(H / PH);
+    for (let p = 0; p < pages; p++) {
+      const part = document.createElement("canvas");
+      part.width = canvas.width; part.height = Math.round(canvas.height * Math.min(PH, H - p * PH) / H);
+      part.getContext("2d").drawImage(canvas, 0, Math.round(canvas.height * p * PH / H), canvas.width, part.height, 0, 0, part.width, part.height);
+      if (p > 0) pdf.addPage();
+      pdf.addImage(part.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, 297 * part.height / (canvas.height * PH / H));
+    }
+    pdf.save(`${invoiceFileBase(inv)}.pdf`);
+  } finally { iframe.remove(); }
+}
 async function downloadInvoiceDocx(inv, speciesList, settings) {
   const D = await import(/* @vite-ignore */ "https://esm.sh/docx@9.7.1");
   const bin = atob(LOGO_INVOICE_B64);
@@ -10107,10 +10141,16 @@ function InvoicesPage({ data, setData }) {
   };
 
   const doPrint = () => { save(inv); printHtmlDocument(buildInvoiceHtml(inv, data.species, settings), invoiceFileBase(inv)); };
+  const doPdf = async () => {
+    save(inv); setError(""); setBusy("pdf");
+    try { await downloadInvoicePdf(inv, data.species, settings); }
+    catch (e) { setError("Impossible de générer le PDF (connexion internet nécessaire la première fois). Utilise « Imprimer » en attendant."); }
+    setBusy("");
+  };
   const doWord = async () => {
     save(inv); setError(""); setBusy("word");
     try { await downloadInvoiceDocx(inv, data.species, settings); }
-    catch (e) { setError("Impossible de générer le fichier Word (connexion internet nécessaire la première fois). Utilise « Imprimer / PDF » en attendant."); }
+    catch (e) { setError("Impossible de générer le fichier Word (connexion internet nécessaire la première fois). Utilise « Imprimer » en attendant."); }
     setBusy("");
   };
   const html = buildInvoiceHtml(inv, data.species, settings);
@@ -10122,7 +10162,8 @@ function InvoicesPage({ data, setData }) {
         <div><Eyebrow>Vente</Eyebrow><h1>Facture {inv.numero}</h1></div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn-ghost-sm" onClick={() => { save(inv); setEditing(null); }}><Check size={14} /> Enregistrer</button>
-          <button className="btn-primary" onClick={doPrint}><Printer size={16} /> Imprimer / PDF</button>
+          <button className="btn-primary" disabled={busy === "pdf"} onClick={doPdf}><Download size={16} /> {busy === "pdf" ? "Génération…" : "Télécharger PDF"}</button>
+          <button className="btn-ghost-sm" onClick={doPrint}><Printer size={14} /> Imprimer</button>
           <button className="btn-primary" disabled={busy === "word"} onClick={doWord}><Download size={16} /> {busy === "word" ? "Génération…" : "Word (.docx)"}</button>
         </div>
       </div>
