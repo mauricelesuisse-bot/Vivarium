@@ -7328,7 +7328,7 @@ function SpeciesList({ data, setData, group, openSpecies, openNewSpecies, onBack
       <div className="toolbar">
         <div className="search-box">
           <SearchIcon size={15} />
-          <input placeholder="Rechercher un nom, une famille…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off" placeholder="Rechercher un nom, une famille…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div>
           <button type="button" className="collapsible-label" onClick={() => setShowDiet(!showDiet)}>
@@ -7472,7 +7472,7 @@ function SpeciesStatusList({ data, statusFilter, openSpecies, onBack }) {
       <div className="toolbar">
         <div className="search-box">
           <SearchIcon size={15} />
-          <input placeholder="Rechercher un nom, une famille…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off" placeholder="Rechercher un nom, une famille…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
 
@@ -7973,7 +7973,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           </button>
           <div className="species-jump" ref={jumpRef}>
             <SearchIcon size={13} className="species-jump-icon" />
-            <input
+            <input spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off"
               placeholder={`Aller à… (${GROUPS.find((g) => g.id === sp.groupe)?.label || sp.groupe})`}
               value={jumpQuery}
               onChange={(e) => { setJumpQuery(e.target.value); setJumpOpen(true); }}
@@ -10248,7 +10248,7 @@ function InvoicesPage({ data, setData }) {
 
           <div className="lbl-card">
             <Eyebrow>Animaux — cocher une ou plusieurs espèces</Eyebrow>
-            <div className="search-box"><SearchIcon size={15} /><input placeholder="Rechercher une espèce…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+            <div className="search-box"><SearchIcon size={15} /><input spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off" placeholder="Rechercher une espèce…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             <div className="inv-picker">
               {matches.slice(0, 60).map((s) => {
                 const t0 = (s.tarifs || [])[0];
@@ -11065,7 +11065,7 @@ function SearchPage({ data, goSpecies }) {
       <div className="page-head"><div><Eyebrow>Explorer</Eyebrow><h1>Recherche</h1></div></div>
       <div className="search-box search-box-lg">
         <SearchIcon size={16} />
-        <input autoFocus placeholder="Espèce, famille, terrarium, observation, provenance…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input spellCheck={false} autoCorrect="off" autoCapitalize="off" autoComplete="off" autoFocus placeholder="Espèce, famille, terrarium, observation, provenance…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {results && (
