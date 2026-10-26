@@ -7024,6 +7024,14 @@ const StatusPill = ({ statut }) => {
   return <span className={`pill pill-${statut}`}>{s.label}</span>;
 };
 
+// Pastilles « Vivants » / « Œufs » (stock actuel de l'espèce)
+const StockPills = ({ sp }) => (sp.has_vivants || sp.has_oeufs) ? (
+  <span className="stock-pills">
+    {sp.has_vivants && <span className="stock-pill stock-vivants">Vivants</span>}
+    {sp.has_oeufs && <span className="stock-pill stock-oeufs">Œufs</span>}
+  </span>
+) : null;
+
 const Field = ({ label, value, onChange, type = "text", options, placeholder = "—" }) => {
   return (
     <label className={`field ${type === "textarea" ? "field-wide" : ""}`}>
@@ -7122,6 +7130,7 @@ function SpeciesCard({ sp, onOpen }) {
         </div>
         <div className="spec-sci-name"><SpeciesName sp={sp} /></div>
         {sp.common_name && <div className="spec-common-name">{sp.common_name}</div>}
+        {(sp.has_vivants || sp.has_oeufs) && <div className="stock-row"><StockPills sp={sp} /></div>}
         <div className="spec-card-footer">
           <span className="spec-origin"><MapPin size={12} /> {originOf(sp) || "Origine inconnue"}</span>
           <StatusPill statut={sp.statut} />
@@ -8041,6 +8050,8 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
           {sp.common_name && <div className="detail-common-name">{sp.common_name}</div>}
           <div className="detail-meta-row">
             <StatusPill statut={sp.statut} />
+            <label className={`stock-toggle ${sp.has_vivants ? "on-vivants" : ""}`}><input type="checkbox" checked={!!sp.has_vivants} onChange={(e) => updateSp({ has_vivants: e.target.checked })} /> Vivants</label>
+            <label className={`stock-toggle ${sp.has_oeufs ? "on-oeufs" : ""}`}><input type="checkbox" checked={!!sp.has_oeufs} onChange={(e) => updateSp({ has_oeufs: e.target.checked })} /> Œufs en incubation</label>
             {sp.conditions?.difficulte && (
               <span className={`difficulte-tag difficulte-${sp.conditions.difficulte}`}>
                 {DIFFICULTES.find((d) => d.id === sp.conditions.difficulte)?.label || sp.conditions.difficulte}
@@ -11581,6 +11592,14 @@ input,select,textarea{ font-family:inherit; }
 .spec-card-footer{ display:flex; align-items:center; justify-content:space-between; margin-top:9px; }
 .spec-origin{ font-size:11px; color:var(--text-faint); display:flex; align-items:center; gap:4px; }
 
+.stock-row{ margin-top:8px; } .stock-pills{ display:inline-flex; gap:6px; flex-wrap:wrap; }
+.stock-pill{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; border:1px solid; }
+.stock-vivants{ color:#2C4A2E; background:#E3ECD8; border-color:#8CA37E; }
+.stock-oeufs{ color:#7A5A12; background:#F6E9C8; border-color:#D19A44; }
+.stock-toggle{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:3px 10px; border-radius:20px; border:1px solid var(--border-soft, #ccc); color:var(--text-dim, #666); cursor:pointer; user-select:none; }
+.stock-toggle input{ accent-color:#5E7D4F; margin:0; }
+.stock-toggle.on-vivants{ color:#2C4A2E; background:#E3ECD8; border-color:#8CA37E; font-weight:600; }
+.stock-toggle.on-oeufs{ color:#7A5A12; background:#F6E9C8; border-color:#D19A44; font-weight:600; }
 .pill{ font-size:10px; text-transform:uppercase; letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace; padding:3px 8px; border-radius:20px; border:1px solid; }
 .pill-actif{ color:var(--moss); border-color:var(--moss-deep); background:rgba(140,163,126,0.1); }
 .pill-ancien{ color:var(--amber); border-color:var(--amber-deep); background:rgba(209,154,68,0.1); }
