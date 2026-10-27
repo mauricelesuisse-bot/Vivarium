@@ -7025,10 +7025,12 @@ const StatusPill = ({ statut }) => {
 };
 
 // Pastilles « Vivants » / « Œufs » (stock actuel de l'espèce)
-const StockPills = ({ sp }) => (sp.has_vivants || sp.has_oeufs) ? (
+const isCommandee = (sp) => !!sp.has_commande;
+const StockPills = ({ sp }) => (sp.has_vivants || sp.has_oeufs || isCommandee(sp)) ? (
   <span className="stock-pills">
     {sp.has_vivants && <span className="stock-pill stock-vivants">Vivants</span>}
     {sp.has_oeufs && <span className="stock-pill stock-oeufs">Œufs</span>}
+    {isCommandee(sp) && <span className="stock-pill stock-commande">Commandée</span>}
   </span>
 ) : null;
 
@@ -7130,7 +7132,7 @@ function SpeciesCard({ sp, onOpen }) {
         </div>
         <div className="spec-sci-name"><SpeciesName sp={sp} /></div>
         {sp.common_name && <div className="spec-common-name">{sp.common_name}</div>}
-        {(sp.has_vivants || sp.has_oeufs) && <div className="stock-row"><StockPills sp={sp} /></div>}
+        {(sp.has_vivants || sp.has_oeufs || isCommandee(sp)) && <div className="stock-row"><StockPills sp={sp} /></div>}
         <div className="spec-card-footer">
           <span className="spec-origin"><MapPin size={12} /> {originOf(sp) || "Origine inconnue"}</span>
           <StatusPill statut={sp.statut} />
@@ -8052,6 +8054,7 @@ function SpeciesDetail({ data, setData, spId, onBack, onNavigate, terrariumsOf }
             <StatusPill statut={sp.statut} />
             <label className={`stock-toggle ${sp.has_vivants ? "on-vivants" : ""}`}><input type="checkbox" checked={!!sp.has_vivants} onChange={(e) => updateSp({ has_vivants: e.target.checked })} /> Vivants</label>
             <label className={`stock-toggle ${sp.has_oeufs ? "on-oeufs" : ""}`}><input type="checkbox" checked={!!sp.has_oeufs} onChange={(e) => updateSp({ has_oeufs: e.target.checked })} /> Œufs en incubation</label>
+            <label className={`stock-toggle ${isCommandee(sp) ? "on-commande" : ""}`}><input type="checkbox" checked={isCommandee(sp)} onChange={(e) => updateSp({ has_commande: e.target.checked })} /> Commandée</label>
             {sp.conditions?.difficulte && (
               <span className={`difficulte-tag difficulte-${sp.conditions.difficulte}`}>
                 {DIFFICULTES.find((d) => d.id === sp.conditions.difficulte)?.label || sp.conditions.difficulte}
@@ -11596,6 +11599,8 @@ input,select,textarea{ font-family:inherit; }
 .stock-pill{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; border:1px solid; }
 .stock-vivants{ color:#2C4A2E; background:#E3ECD8; border-color:#8CA37E; }
 .stock-oeufs{ color:#7A5A12; background:#F6E9C8; border-color:#D19A44; }
+.stock-commande{ color:#2F4F6E; background:#DCE8F3; border-color:#7FA3C4; }
+.stock-toggle.on-commande{ color:#2F4F6E; background:#DCE8F3; border-color:#7FA3C4; font-weight:600; }
 .stock-toggle{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:3px 10px; border-radius:20px; border:1px solid var(--border-soft, #ccc); color:var(--text-dim, #666); cursor:pointer; user-select:none; }
 .stock-toggle input{ accent-color:#5E7D4F; margin:0; }
 .stock-toggle.on-vivants{ color:#2C4A2E; background:#E3ECD8; border-color:#8CA37E; font-weight:600; }
